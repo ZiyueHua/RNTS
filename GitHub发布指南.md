@@ -36,6 +36,23 @@ rnts/
 
 ## 二、配置身份并提交（做一次即可）
 
+> **前置：Windows 上得先装 git。** 新系统里在 cmd 敲 `git` 报
+> `'git' 不是内部或外部命令`，就是没装 —— 这跟项目无关，装一次就好。
+>
+> - 官方安装包：<https://gitforwindows.org/>（直连 github.com 在国内常超时）
+> - **国内镜像（快，推荐）**：<https://mirrors.huaweicloud.com/git-for-windows/>
+>   → 进对应版本目录 → 下载 `Git-<版本>-64-bit.exe`
+>   （校验和可在 `winget show --id Git.Git` 的输出里看到，对得上再装）
+>
+> 安装**一路保持默认**即可，默认会勾上 "Git from the command line and also from
+> 3rd-party software"（写 PATH）并装上浏览器认证组件 Git Credential Manager。
+> 不想弹 UAC 可以静默装到当前用户：
+> `Git-<版本>-64-bit.exe /VERYSILENT /NORESTART /SUPPRESSMSGBOXES /CURRENTUSER`
+>
+> ⚠ **装完必须关掉所有已经开着的 cmd / 终端窗口，再开新窗口。** PATH 是窗口启动时
+> 读取的，老窗口不会自动更新 —— 不关就会觉得「明明装了还是找不到 git」。
+> 开新窗口敲 `git --version` 能出版本号就算成功。
+
 ```bash
 cd /d <项目根目录>          # 例如 D:\RNTS
 
