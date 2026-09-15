@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  rnts:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data          # SQLite 数据库持久化
+      - ./config:/app/config      # 配置文件持久化
+    environment:
+      - TZ=Asia/Shanghai          # 定时任务按北京时间执行
+    restart: unless-stopped

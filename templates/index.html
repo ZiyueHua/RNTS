@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}论文列表 — RNTS{% endblock %}
+
+{% block content %}
+<div class="layout">
+    <!-- 筛选面板 -->
+    <aside class="filter-panel">
+        <form id="filter-form" hx-get="/" hx-target="#paper-list" hx-trigger="change, submit" hx-push-url="true">
+            <input type="hidden" name="page" value="1">
+
+            <h3>显示范围</h3>
+            <label class="check-row" title="只显示命中关键词或高亮作者的文献">
+                {# 同名隐藏字段保证取消勾选时也会提交 matched_only=0（重复参数以最后一个为准） #}
+                <input type="hidden" name="matched_only" value="0">
+                <input type="checkbox" name="matched_only" value="1"
+                       {% if filters.matched_only %}checked{% endif %}>
+                <span>只显示命中关键词 / 作者</span>
+            </label>
+
+            <h3>搜索</h3>
+            <input type="text" name="search" value="{{ filters.search }}"
+                   placeholder="标题或摘要..." hx-get="/" hx-target="#paper-list"
+                   hx-trigger="keyup changed delay:400ms" hx-include="#filter-form">
+
+            <h3>来源</h3>
+            <select name="source">
+                <option value="">全部</option>
+                {% for name, display in sources %}
+                <option value="{{ name }}" {% if filters.source == name %}selected{% endif %}>{{ display }}</option>
+                {% endfor %}
+            </select>
+
+            <h3>作者组</h3>
+            <select name="author_group">
+                <option value="0" {% if filters.author_group == 0 %}selected{% endif %}>全部</option>
+                <option value="1" {% if filters.author_group == 1 %}selected{% endif %}>国际团队</option>
+                <option value="2" {% if filters.author_group == 2 %}selected{% endif %}>国内团队</option>
+            </select>
+
+            <h3>命中关键词</h3>
+            <select name="keyword">
+                <option value="">全部</option>
+                {% for kw in keywords %}
+                <option value="{{ kw }}" {% if filters.keyword == kw %}selected{% endif %}>{{ kw }}</option>
+                {% endfor %}
+            </select>
+
+            <h3>日期范围</h3>
+            <label>从</label>
+            <input type="date" name="date_from" value="{{ filters.date_from }}">
+            <label>到</label>
+            <input type="date" name="date_to" value="{{ filters.date_to }}">
+
+            <h3>每页</h3>
+            <select name="per_page">
+                <option value="20" {% if filters.per_page == 20 %}selected{% endif %}>20</option>
+                <option value="50" {% if filters.per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if filters.per_page == 100 %}selected{% endif %}>100</option>
+            </select>
+
+            <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                <button type="submit" class="outline" style="flex:1; font-size:0.85rem;">筛选</button>
+                <a href="/" class="outline" style="padding: 0.3rem 0.6rem; font-size:0.85rem;">重置</a>
+            </div>
+            <div class="export-box">
+                <h3>报告导出</h3>
+                <p class="export-hint"><small>按当前筛选条件导出：</small></p>
+                <div class="export-links">
+                    <a href="/api/v1/papers/export?source={{ filters.source }}&author_group={{ filters.author_group }}&search={{ filters.search }}&matched_only={{ filters.matched_only }}"
+                       class="outline export-link">CSV</a>
+                    <a href="/api/v1/papers/export_html?source={{ filters.source }}&author_group={{ filters.author_group }}&search={{ filters.search }}&matched_only={{ filters.matched_only }}"
+                       class="outline export-link">HTML</a>
+                    <a href="/api/v1/papers/export_md?source={{ filters.source }}&author_group={{ filters.author_group }}&search={{ filters.search }}&matched_only={{ filters.matched_only }}"
+                       class="outline export-link">MD</a>
+                </div>
+                <p class="export-hint"><small>定时产物：</small></p>
+                <div class="export-links">
+                    <a href="/api/v1/papers/report_monthly" class="outline export-link">近一月更新</a>
+                    <a href="/api/v1/papers/report_authors" class="outline export-link">近一年作者精选</a>
+                </div>
+                <p class="export-hint"><small>在线浏览：</small></p>
+                <div class="export-links">
+                    <a href="/authors" class="outline export-link">作者精选页</a>
+                    <a href="/favorites" class="outline export-link">我的收藏</a>
+                </div>
+            </div>
+        </form>
+    </aside>
+
+    <!-- 论文列表 -->
+    <div id="paper-list">
+        {% include "partials/paper_list.html" %}
+    </div>
+</div>
+{% endblock %}

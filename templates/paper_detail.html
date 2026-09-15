@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ paper.title[:60] }} — RNTS{% endblock %}
+
+{% block content %}
+<article>
+    <header class="detail-header">
+        <div class="detail-title">
+            <span class="tag tag-source">{{ paper.source }}</span>
+            <h2>{{ paper.title }}</h2>
+        </div>
+        {% with paper_id = paper.id, faved = faved %}
+            {% include "partials/fav_button.html" %}
+        {% endwith %}
+    </header>
+
+    <div style="margin-bottom: 1rem;">
+        {% for kw in paper.keyword_list %}
+        <span class="tag tag-keyword">{{ kw }}</span>
+        {% endfor %}
+        {% for au in paper.author_list %}
+        <span class="tag {% if paper.author_group in [1, 3] %}tag-author-intl{% else %}tag-author{% endif %}">{{ au }}</span>
+        {% endfor %}
+    </div>
+
+    <table>
+        <tr>
+            <td style="width: 100px; color: var(--pico-muted-color);">作者</td>
+            <td>{{ paper.authors or '未知' }}</td>
+        </tr>
+        <tr>
+            <td style="color: var(--pico-muted-color);">日期</td>
+            <td>{{ paper.date_added or '未知' }}</td>
+        </tr>
+        <tr>
+            <td style="color: var(--pico-muted-color);">来源</td>
+            <td>{{ paper.source }}</td>
+        </tr>
+        <tr>
+            <td style="color: var(--pico-muted-color);">链接</td>
+            <td><a href="{{ paper.link }}" target="_blank">{{ paper.link }}</a></td>
+        </tr>
+    </table>
+
+    <h3>摘要</h3>
+    <p>{{ paper.summary or '无摘要' }}</p>
+
+    {% if favorite %}
+    <section class="fav-detail">
+        <h3>我的收藏</h3>
+        {% if favorite.note %}
+        <p class="fav-note">📝 {{ favorite.note }}</p>
+        {% endif %}
+        {% if favorite.groups %}
+        <p>
+            {% for g in favorite.groups %}
+            <span class="tag tag-group">🗂 {{ g.name }}</span>
+            {% endfor %}
+        </p>
+        {% endif %}
+        {% if favorite.pdf_path %}
+        <p class="pdf-line">
+            <a href="/api/v1/favorites/{{ paper.id }}/pdf" target="_blank" class="pdf-badge">📄 {{ favorite.pdf_name or 'PDF 附件' }}</a>
+            <small class="pdf-origin">{{ '已上传副本' if favorite.pdf_origin == 'upload' else '本地路径' }}</small>
+        </p>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    <div style="margin-top: 1.5rem;">
+        <a href="{{ paper.link }}" target="_blank" class="primary">查看原文 ↗</a>
+        <a href="/" class="outline">返回列表</a>
+        <a href="/favorites" class="outline">我的收藏</a>
+    </div>
+</article>
+{% endblock %}

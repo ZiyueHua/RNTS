@@ -1,0 +1,1065 @@
+/* ============================================================
+   RNTS 自定义样式 —— 基于 Pico.css 2 的主题精修
+   量子物理蓝紫主色 · 卡片化布局 · 统一间距体系
+   ============================================================ */
+
+/* ---------- 主题变量 ---------- */
+:root {
+    /* 覆盖 Pico 主色：靛蓝紫 */
+    --pico-primary: #4f46e5;
+    --pico-primary-background: #4f46e5;
+    --pico-primary-border: #4338ca;
+    --pico-primary-hover: #4338ca;
+    --pico-primary-hover-background: #4338ca;
+    --pico-primary-focus: rgba(79, 70, 229, 0.35);
+    --pico-primary-inverse: #ffffff;
+
+    --rnt-accent: #6366f1;
+    --rnt-accent-soft: #eef2ff;
+    --rnt-gold: #f59e0b;
+    --rnt-danger: #dc2626;
+    --rnt-radius: 0.625rem;
+    --rnt-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+    --rnt-shadow-hover: 0 6px 18px rgba(15, 23, 42, 0.10), 0 2px 6px rgba(15, 23, 42, 0.06);
+    --rnt-border: var(--pico-muted-border-color);
+
+    /* 顶部导航实测高度，由 base.html 里的脚本写入（窄屏换行后会变高）。
+       用途：筛选面板 / 分组面板的 sticky 偏移，避免滚动时被导航盖住。 */
+    --rnt-nav-h: 6.5rem;
+}
+
+/* ---------- 顶部导航 ---------- */
+.top-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.55rem 1.25rem;
+    background: rgba(79, 70, 229, 0.92);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--pico-primary-inverse);
+    border-radius: 0;
+    margin-bottom: 1.25rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    box-shadow: 0 2px 12px rgba(49, 46, 129, 0.25);
+}
+
+.top-nav ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.top-nav .brand {
+    color: #fff;
+    text-decoration: none;
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.top-nav .brand strong {
+    font-size: 1.15rem;
+    letter-spacing: 0.03em;
+}
+
+.top-nav .brand small {
+    opacity: 0.75;
+    font-size: 0.75rem;
+}
+
+.top-nav a {
+    color: rgba(255, 255, 255, 0.82);
+    text-decoration: none;
+    font-size: 0.92rem;
+    padding: 0.28rem 0.7rem;
+    border-radius: 2rem;
+    transition: background 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+
+.top-nav a:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.top-nav a.active {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.2);
+    font-weight: 600;
+}
+
+.top-nav .fetch-btn {
+    margin: 0;
+    padding: 0.3rem 0.9rem;
+    font-size: 0.85rem;
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.5);
+    white-space: nowrap;
+}
+
+.top-nav .fetch-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: #fff;
+}
+
+/* 导航栏右侧两个操作按钮（补抓 arXiv + 手动抓取） */
+.top-nav .nav-actions {
+    gap: 0.5rem;
+}
+
+.top-nav .nav-actions > li {
+    margin: 0;
+}
+
+/* 「⟳ 补抓 arXiv」：按钮 + 弹出面板（details）。
+   日期框若常驻会多占约 330px，使导航在 1440px 及以下换行、高度翻倍，
+   并让首页筛选面板的 sticky 偏移失效，所以收进弹出面板里。 */
+.top-nav .arxiv-fetch {
+    position: relative;
+}
+
+.top-nav .arxiv-fetch details {
+    margin: 0;
+}
+
+.top-nav .arxiv-fetch summary.fetch-btn {
+    display: inline-block;
+    list-style: none;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 2rem;
+}
+
+.top-nav .arxiv-fetch summary.fetch-btn::-webkit-details-marker {
+    display: none;
+}
+
+.top-nav .arxiv-fetch details[open] > summary.fetch-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: #fff;
+}
+
+.top-nav .arxiv-popover {
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    right: 0;
+    z-index: 200;
+    width: 16.5rem;
+    padding: 0.9rem;
+    background: var(--pico-card-background-color);
+    color: var(--pico-color);
+    border: 1px solid var(--rnt-border);
+    border-radius: var(--rnt-radius);
+    box-shadow: var(--rnt-shadow-hover);
+}
+
+.top-nav .arxiv-popover label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 0.78rem;
+    line-height: 1.35;
+    color: var(--pico-muted-color);
+}
+
+.top-nav .arxiv-popover input[type="date"] {
+    width: 100%;
+    height: auto;
+    margin: 0 0 0.6rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.85rem;
+}
+
+/* 面板内是浅色卡片，按钮恢复常规配色（.top-nav .fetch-btn 的白字白边在这里不适用） */
+.top-nav .arxiv-popover button.fetch-btn {
+    width: 100%;
+    margin: 0;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+    color: var(--pico-primary-inverse);
+    background: var(--pico-primary-background);
+    border-color: var(--pico-primary-border);
+}
+
+/* 导航链接区本身较宽（约 670px），窄屏下压缩一下，给右侧抓取按钮留出空间 */
+@media (max-width: 1400px) {
+    .top-nav ul { gap: 0.6rem; }
+    .top-nav a { padding: 0.28rem 0.5rem; font-size: 0.86rem; }
+}
+
+/* 更窄时让出品牌副标题（页面标题里已有同样信息），避免导航换行 */
+@media (max-width: 1200px) {
+    .top-nav .brand small { display: none; }
+}
+
+@media (max-width: 900px) {
+    .top-nav .brand small { display: none; }
+    .top-nav a { padding: 0.28rem 0.5rem; }
+}
+
+/* ---------- 页面标题 ---------- */
+.page-head h2 {
+    margin-bottom: 0.3rem;
+}
+
+.page-head-meta {
+    color: var(--pico-muted-color);
+    font-size: 0.85rem;
+    margin-bottom: 1.25rem;
+}
+
+.page-head-meta a {
+    font-weight: 500;
+}
+
+/* ---------- 通用布局 ---------- */
+.layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+@media (max-width: 768px) {
+    .layout {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ---------- 筛选面板 ---------- */
+.filter-panel {
+    padding: 1.1rem;
+    background: var(--pico-card-background-color);
+    border-radius: var(--rnt-radius);
+    border: 1px solid var(--rnt-border);
+    box-shadow: var(--rnt-shadow);
+    position: sticky;
+    top: calc(var(--rnt-nav-h) + 0.75rem);
+}
+
+@media (max-width: 768px) {
+    .filter-panel { position: static; }
+}
+
+.filter-panel h3 {
+    font-size: 0.78rem;
+    margin-bottom: 0.45rem;
+    margin-top: 1.1rem;
+    color: var(--pico-muted-color);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 700;
+}
+
+.filter-panel h3:first-of-type { margin-top: 0; }
+
+.filter-panel label {
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    margin-bottom: 0.2rem;
+}
+
+.filter-panel input[type="text"],
+.filter-panel input[type="date"],
+.filter-panel input[type="search"],
+.filter-panel select {
+    width: 100%;
+    padding: 0.35rem 0.55rem;
+    font-size: 0.85rem;
+    margin-bottom: 0;
+}
+
+/* 显示范围勾选（只显示命中文献） */
+.filter-panel .check-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.55rem;
+    margin-bottom: 0;
+    border: 1px solid var(--rnt-border);
+    border-radius: 0.5rem;
+    background: var(--rnt-accent-soft);
+    font-size: 0.83rem;
+    color: var(--pico-primary);
+    cursor: pointer;
+}
+
+.filter-panel .check-row input[type="checkbox"] {
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.filter-panel .check-row span {
+    line-height: 1.35;
+}
+
+/* 报告导出区 */.export-box {
+    margin-top: 1.25rem;
+    padding-top: 0.9rem;
+    border-top: 1px dashed var(--rnt-border);
+}
+
+.export-box h3 {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--pico-muted-color);
+    margin-bottom: 0.3rem;
+}
+
+.export-hint { margin: 0.35rem 0 0.2rem; color: var(--pico-muted-color); }
+
+.export-links {
+    display: flex;
+    gap: 0.35rem;
+}
+
+.export-link {
+    font-size: 0.78rem;
+    flex: 1;
+    text-align: center;
+    padding: 0.28rem 0.3rem !important;
+    margin-bottom: 0.35rem;
+    white-space: nowrap;
+}
+
+/* ---------- 论文卡片 ---------- */
+.paper-card {
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--rnt-border);
+    border-radius: var(--rnt-radius);
+    padding: 1rem 1.15rem;
+    margin-bottom: 0.85rem;
+    box-shadow: var(--rnt-shadow);
+    transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.paper-card:hover {
+    box-shadow: var(--rnt-shadow-hover);
+    transform: translateY(-2px);
+    border-color: var(--rnt-accent-soft);
+}
+
+.paper-card-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.6rem;
+}
+
+.paper-card .paper-title {
+    font-size: 1.02rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+    line-height: 1.45;
+}
+
+.paper-card .paper-title a {
+    color: var(--pico-primary);
+    text-decoration: none;
+}
+
+.paper-card .paper-title a:hover {
+    text-decoration: underline;
+}
+
+.paper-card .paper-meta {
+    font-size: 0.8rem;
+    color: var(--pico-muted-color);
+    margin-bottom: 0.3rem;
+    line-height: 1.5;
+}
+
+.paper-card .paper-summary {
+    font-size: 0.88rem;
+    line-height: 1.55;
+    color: var(--pico-color);
+    max-height: 100px;
+    overflow: hidden;
+    position: relative;
+}
+
+.paper-card .paper-summary.expanded {
+    max-height: none;
+}
+
+.paper-date {
+    color: var(--pico-muted-color);
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 0.15rem;
+}
+
+/* 卡片头部右侧：日期 + 收藏星标 */
+.paper-head-right {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+    margin-top: 0.15rem;
+}
+
+/* ---------- 收藏星标按钮 ---------- */
+.fav-btn {
+    background: none;
+    border: none;
+    font-size: 1.35rem;
+    line-height: 1;
+    color: var(--pico-muted-color);
+    cursor: pointer;
+    padding: 0.15rem 0.3rem;
+    border-radius: 0.4rem;
+    flex-shrink: 0;
+    transition: transform 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.fav-btn:hover {
+    color: var(--rnt-gold);
+    background: rgba(245, 158, 11, 0.12);
+    transform: scale(1.15);
+}
+
+.fav-btn.faved {
+    color: var(--rnt-gold);
+}
+
+.fav-btn.faved:hover {
+    color: #d97706;
+}
+
+.fav-star {
+    color: var(--rnt-gold);
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+/* ---------- 标签 ---------- */
+.tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.12rem 0.55rem;
+    border-radius: 1rem;
+    font-size: 0.72rem;
+    margin-right: 0.3rem;
+    margin-top: 0.3rem;
+    font-weight: 500;
+}
+
+.tag-source {
+    background: #e0e7ff;
+    color: #4338ca;
+}
+
+.tag-keyword {
+    background: #fef3c7;
+    color: #b45309;
+}
+
+.tag-author {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.tag-author-intl {
+    background: #fce7f3;
+    color: #be185d;
+}
+
+.tag-group {
+    background: var(--rnt-accent-soft);
+    color: #4338ca;
+}
+
+.tag-x {
+    background: none;
+    border: none;
+    color: inherit;
+    opacity: 0.55;
+    cursor: pointer;
+    padding: 0;
+    font-size: 0.85rem;
+    line-height: 1;
+}
+
+.tag-x:hover { opacity: 1; color: var(--rnt-danger); }
+
+/* ---------- 分页 ---------- */
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.pagination a,
+.pagination span {
+    padding: 0.3rem 0.8rem;
+    border: 1px solid var(--rnt-border);
+    border-radius: 0.45rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    background: var(--pico-card-background-color);
+    text-decoration: none;
+}
+
+.pagination a:hover {
+    border-color: var(--rnt-accent);
+    color: var(--rnt-accent);
+}
+
+.pagination .current {
+    background: var(--pico-primary-background);
+    color: var(--pico-primary-inverse);
+    border-color: var(--pico-primary-border);
+    font-weight: 600;
+}
+
+/* ---------- 统计页 ---------- */
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-card {
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--rnt-border);
+    border-radius: var(--rnt-radius);
+    padding: 1.2rem;
+    text-align: center;
+    box-shadow: var(--rnt-shadow);
+    border-top: 3px solid var(--rnt-accent);
+}
+
+.stat-card .stat-value {
+    font-size: 2rem;
+    font-weight: bold;
+    color: var(--pico-primary);
+}
+
+.stat-card .stat-label {
+    font-size: 0.85rem;
+    color: var(--pico-muted-color);
+}
+
+.chart-container {
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--rnt-border);
+    border-radius: var(--rnt-radius);
+    padding: 1.1rem;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--rnt-shadow);
+}
+
+.chart-container canvas {
+    max-height: 300px;
+}
+
+.rank-list {
+    list-style: none;
+    padding: 0;
+}
+
+.rank-list li {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+    border-bottom: 1px solid var(--rnt-border);
+    font-size: 0.9rem;
+}
+
+.rank-list li:last-child {
+    border-bottom: none;
+}
+
+.rank-list .rank-num {
+    color: var(--pico-muted-color);
+    width: 1.5rem;
+}
+
+.rank-list .rank-count {
+    font-weight: bold;
+    color: var(--pico-primary);
+}
+
+/* ---------- 设置页 ---------- */
+.config-section {
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--rnt-border);
+    border-radius: var(--rnt-radius);
+    padding: 1.2rem;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--rnt-shadow);
+}
+
+.config-section h3 {
+    border-bottom: 2px solid var(--rnt-accent);
+    padding-bottom: 0.5rem;
+}
+
+.config-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 0.8rem 0;
+}
+
+.config-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 1rem;
+    font-size: 0.8rem;
+    background: var(--rnt-accent-soft);
+    border: 1px solid var(--rnt-border);
+}
+
+.config-chip button {
+    background: none;
+    border: none;
+    color: var(--pico-muted-color);
+    cursor: pointer;
+    padding: 0;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.config-chip button:hover {
+    color: var(--rnt-danger);
+}
+
+.add-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.add-form input {
+    flex: 1;
+}
+
+/* ---------- 作者精选页 ---------- */
+.author-section {
+    margin-bottom: 2.25rem;
+}
+
+.section-title {
+    border-left: 4px solid var(--rnt-accent);
+    padding-left: 0.6rem;
+    margin-bottom: 0.9rem;
+}
+
+.author-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-bottom: 1rem;
+    padding: 0.65rem;
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--rnt-border);
+    border-radius: var(--rnt-radius);
+    box-shadow: var(--rnt-shadow);
+}
+
+.author-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.32rem 0.75rem;
+    font-size: 0.83rem;
+    border: 1px solid var(--rnt-border);
+    border-radius: 2rem;
+    background: var(--pico-card-background-color);
+    /* 注意：不能用 var(--pico-color)，Pico 在 button 上把它重定义为白色 */
+    color: var(--pico-muted-color);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    margin: 0;
+}
+
+.author-tab:hover {
+    border-color: var(--rnt-accent);
+    color: var(--pico-primary);
+    transform: translateY(-1px);
+}
+
+.author-tab.active {
+    background: var(--pico-primary-background);
+    border-color: var(--pico-primary-border);
+    color: var(--pico-primary-inverse);
+    font-weight: 600;
+}
+
+.author-tab .tab-count {
+    display: inline-block;
+    min-width: 1.4rem;
+    text-align: center;
+    padding: 0 0.3rem;
+    border-radius: 1rem;
+    font-size: 0.72rem;
+    background: rgba(99, 102, 241, 0.15);
+    color: var(--rnt-accent);
+}
+
+.author-tab.active .tab-count {
+    background: rgba(255, 255, 255, 0.25);
+    color: #fff;
+}
+
+.author-panel {
+    display: none;
+}
+
+.author-panel.active {
+    display: block;
+    animation: fadeIn 0.25s ease;
+}
+
+.author-panel-head {
+    color: var(--pico-muted-color);
+    font-size: 0.88rem;
+    margin-bottom: 0.8rem;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+}
+
+/* ---------- 收藏页 ---------- */
+.fav-layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 1.5rem;
+    align-items: start;
+}
+
+@media (max-width: 768px) {
+    .fav-layout { grid-template-columns: 1fr; }
+}
+
+.group-panel {
+    padding: 1.1rem;
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--rnt-border);
+    border-radius: var(--rnt-radius);
+    box-shadow: var(--rnt-shadow);
+    position: sticky;
+    top: calc(var(--rnt-nav-h) + 0.75rem);
+}
+
+@media (max-width: 768px) {
+    .group-panel { position: static; }
+}
+
+.group-panel h3 {
+    font-size: 0.95rem;
+    margin-bottom: 0.8rem;
+}
+
+.group-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.group-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.45rem 0.65rem;
+    border-radius: 0.5rem;
+    color: var(--pico-color);
+    text-decoration: none;
+    font-size: 0.88rem;
+    transition: background 0.15s ease;
+}
+
+.group-item:hover {
+    background: var(--rnt-accent-soft);
+    color: var(--pico-color);
+    text-decoration: none;
+}
+
+.group-item.active {
+    background: var(--rnt-accent-soft);
+    color: var(--pico-primary);
+    font-weight: 600;
+}
+
+.group-count {
+    font-size: 0.75rem;
+    color: var(--pico-muted-color);
+    background: var(--pico-secondary-background);
+    border-radius: 1rem;
+    padding: 0.05rem 0.5rem;
+}
+
+.group-item.active .group-count {
+    color: var(--pico-primary);
+    background: rgba(79, 70, 229, 0.12);
+}
+
+.group-new {
+    display: flex;
+    gap: 0.35rem;
+    margin-top: 1rem;
+    padding-top: 0.9rem;
+    border-top: 1px dashed var(--rnt-border);
+}
+
+.group-new input {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: auto;
+    padding: 0.35rem 0.55rem;
+    font-size: 0.83rem;
+}
+
+.group-new button,
+.fav-search button {
+    width: auto;
+    white-space: nowrap;
+}
+
+.group-actions {
+    margin-top: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.fav-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.fav-search {
+    display: flex;
+    gap: 0.5rem;
+    flex: 1;
+    max-width: 420px;
+}
+
+.fav-search input {
+    flex: 1;
+    padding: 0.4rem 0.7rem;
+    font-size: 0.88rem;
+    margin-bottom: 0;
+}
+
+.fav-total {
+    color: var(--pico-muted-color);
+    white-space: nowrap;
+}
+
+.fav-card .fav-groups {
+    margin: 0.35rem 0;
+}
+
+.fav-note {
+    font-size: 0.85rem;
+    color: var(--pico-muted-color);
+    background: var(--pico-secondary-background);
+    border-left: 3px solid var(--rnt-accent);
+    padding: 0.4rem 0.65rem;
+    border-radius: 0 0.4rem 0.4rem 0;
+    margin: 0.5rem 0;
+}
+
+.fav-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-top: 0.6rem;
+    padding-top: 0.6rem;
+    border-top: 1px dashed var(--rnt-border);
+    flex-wrap: wrap;
+}
+
+.small-btn {
+    font-size: 0.78rem;
+    padding: 0.25rem 0.6rem;
+    margin: 0;
+}
+
+.small-btn.danger:hover {
+    border-color: var(--rnt-danger);
+    color: var(--rnt-danger);
+}
+
+.link-btn {
+    background: none;
+    border: none;
+    color: var(--rnt-accent);
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 0.2rem 0.3rem;
+}
+
+.link-btn:hover { text-decoration: underline; }
+
+.muted-hint {
+    font-size: 0.8rem;
+    color: var(--pico-muted-color);
+}
+
+.pdf-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.45rem;
+    background: #fee2e2;
+    color: #b91c1c;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.pdf-badge:hover {
+    background: #fecaca;
+    color: #991b1b;
+    text-decoration: none;
+}
+
+.pdf-origin {
+    color: var(--pico-muted-color);
+    font-size: 0.72rem;
+}
+
+/* ---------- 详情页 ---------- */
+.detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.detail-title {
+    flex: 1;
+}
+
+.detail-title h2 {
+    margin-top: 0.4rem;
+    line-height: 1.4;
+}
+
+.fav-detail {
+    background: var(--pico-card-background-color);
+    border: 1px solid var(--rnt-border);
+    border-radius: var(--rnt-radius);
+    padding: 1rem 1.2rem;
+    margin-top: 1.5rem;
+    box-shadow: var(--rnt-shadow);
+}
+
+.fav-detail h3 {
+    font-size: 1rem;
+    margin-bottom: 0.6rem;
+}
+
+.fav-detail .pdf-line {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.4rem 0;
+}
+
+/* ---------- 对话框（原生 <dialog>） ---------- */
+dialog {
+    border-radius: var(--rnt-radius);
+    border: 1px solid var(--rnt-border);
+    box-shadow: var(--rnt-shadow-hover);
+    padding: 1.4rem 1.5rem;
+    min-width: 300px;
+    max-width: 90vw;
+}
+
+dialog::backdrop {
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+}
+
+dialog h4 {
+    margin-bottom: 0.8rem;
+}
+
+dialog textarea,
+dialog input[type="text"] {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+dialog .muted-hint {
+    margin: 0 0 0.6rem;
+}
+
+.dialog-check {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.3rem 0.2rem;
+    font-size: 0.9rem;
+}
+
+.dialog-menu {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    margin-top: 1rem;
+}
+
+/* ---------- 空状态 ---------- */
+.empty-hint {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--pico-muted-color);
+    background: var(--pico-card-background-color);
+    border: 1px dashed var(--rnt-border);
+    border-radius: var(--rnt-radius);
+}
+
+/* ---------- htmx 加载指示器 ---------- */
+.htmx-indicator {
+    display: none;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+    display: inline;
+}
+
+/* ---------- 全局微调 ---------- */
+main.container {
+    padding-bottom: 2.5rem;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+input[name="search"] {
+    transition: border-color 0.2s;
+}

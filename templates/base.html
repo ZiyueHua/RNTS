@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}RNTS — 量子物理学术新闻追踪{% endblock %}</title>
+    <!-- Pico.css：极轻量 CSS 框架 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <!-- HTMX：无需写 JS 的局部刷新 -->
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <!-- Chart.js：统计图表 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/css/custom.css">
+</head>
+<body>
+    <nav class="container-fluid top-nav">
+        <ul>
+            <li><a class="brand" href="/"><strong>RNTS</strong> <small>量子物理学术新闻追踪</small></a></li>
+        </ul>
+        <ul class="nav-links">
+            <li><a href="/" {% if request.url.path == "/" %}class="active"{% endif %}>📋 论文列表</a></li>
+            <li><a href="/authors" {% if request.url.path.startswith("/authors") %}class="active"{% endif %}>👥 作者精选</a></li>
+            <li><a href="/favorites" {% if request.url.path.startswith("/favorites") %}class="active"{% endif %}>⭐ 我的收藏</a></li>
+            <li><a href="/stats" {% if request.url.path == "/stats" %}class="active"{% endif %}>📊 统计</a></li>
+            <li><a href="/settings" {% if request.url.path == "/settings" %}class="active"{% endif %}>⚙️ 设置</a></li>
+        </ul>
+        <ul class="nav-actions">
+            <li class="arxiv-fetch">
+                {# 用 details 做轻量弹出面板：日期框常驻会占约 330px，导致窄屏下导航换行、高度翻倍 #}
+                <details>
+                    <summary class="fetch-btn" title="补抓指定日期提交的 quant-ph 论文（自动向前回溯若干天）">⟳ 补抓 arXiv</summary>
+                    <div class="arxiv-popover">
+                        <form onsubmit="return triggerArxivFetch(this)">
+                            <label for="arxiv-date">补抓日期（按 arXiv 提交日期，自动向前回溯）</label>
+                            <input type="date" id="arxiv-date" name="date" required>
+                            <button type="submit" class="fetch-btn">开始补抓</button>
+                        </form>
+                    </div>
+                </details>
+            </li>
+            <li>
+                <button id="fetch-btn" class="outline fetch-btn" onclick="triggerFetch(this)">⟳ 手动抓取</button>
+            </li>
+        </ul>
+    </nav>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="container">
+        <small>RNTS v{{ app_version }} — Research News Tracking System for Quantum Physics</small>
+    </footer>
+
+    <script>
+    // 顶部导航始终 sticky 在顶部，高度随窗口宽度变化（换行时会变高）。
+    // 把实测高度写进 --rnt-nav-h，供筛选面板 / 分组面板的 sticky 偏移使用，
+    // 这样滚动时它们不会被导航盖住。
+    (function syncNavHeight() {
+        const nav = document.querySelector('.top-nav');
+        if (!nav) return;
+        const apply = () => {
+            document.documentElement.style.setProperty(
+                '--rnt-nav-h', `${Math.round(nav.getBoundingClientRect().height)}px`
+            );
+        };
+        apply();
+        // 窗口宽度变化会让导航换行、改变高度；字体加载完成后也可能变高。
+        // resize 监听覆盖主要场景，ResizeObserver 作为补充（不可用时静默跳过，
+        // 不能让它抛错影响同一段脚本里后面的代码）。
+        window.addEventListener('resize', apply);
+        window.addEventListener('load', apply);
+        try {
+            if (window.ResizeObserver) {
+                window._rntNavObserver = new ResizeObserver(apply);
+                window._rntNavObserver.observe(nav);
+            }
+        } catch (e) {
+            console.warn('导航高度监听不可用，回退到 resize 事件', e);
+        }
+    })();
+
+    // 补抓日期默认填昨天（本地日期）—— 最常见的场景是补上昨天错过的 arXiv 公告
+    document.addEventListener('DOMContentLoaded', () => {
+        const input = document.getElementById('arxiv-date');
+        if (input && !input.value) {
+            const d = new Date();
+            d.setDate(d.getDate() - 1);
+            const pad = n => String(n).padStart(2, '0');
+            input.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        }
+    });
+
+    // 点击面板外部时收起「补抓 arXiv」面板（details 本身不会自动关闭）
+    document.addEventListener('click', (e) => {
+        const details = document.querySelector('.arxiv-fetch details[open]');
+        if (details && !details.contains(e.target)) {
+            details.removeAttribute('open');
+        }
+    });
+
+    // 手动触发抓取
+    function triggerFetch(btn) {
+        btn.disabled = true;
+        btn.textContent = '抓取中...';
+        fetch('/api/v1/papers/fetch', {method: 'POST'})
+            .then(r => r.json())
+            .then(data => {
+                btn.textContent = `完成: 新增 ${data.papers_new} 篇`;
+                btn.disabled = false;
+                // 刷新列表
+                if (window.location.pathname === '/') {
+                    htmx.trigger('#paper-list', 'refresh');
+                    setTimeout(() => location.reload(), 2000);
+                } else {
+                    setTimeout(() => location.reload(), 2000);
+                }
+            })
+            .catch(err => {
+                btn.textContent = '抓取失败';
+                btn.disabled = false;
+                console.error(err);
+            });
+    }
+
+    // 按选定日期补抓 arXiv（只抓 arXiv，不碰其它源）
+    function triggerArxivFetch(form) {
+        const input = form.querySelector('input[type="date"]');
+        const btn = form.querySelector('button');
+        const date = input.value;
+        if (!date) return false;
+
+        btn.disabled = true;
+        btn.textContent = '补抓中...';
+        fetch(`/api/v1/papers/fetch_arxiv?date=${encodeURIComponent(date)}`, {method: 'POST'})
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'error') {
+                    alert(`补抓失败: ${data.error || '未知错误'}`);
+                    btn.textContent = '⟳ 补抓 arXiv';
+                    btn.disabled = false;
+                    return;
+                }
+                btn.textContent = `完成: 新增 ${data.papers_new} 篇`;
+                setTimeout(() => location.reload(), 1500);
+            })
+            .catch(err => {
+                alert(`补抓请求失败: ${err}`);
+                btn.textContent = '⟳ 补抓 arXiv';
+                btn.disabled = false;
+                console.error(err);
+            });
+        return false;  // 阻止表单默认提交
+    }
+    </script>
+</body>
+</html>

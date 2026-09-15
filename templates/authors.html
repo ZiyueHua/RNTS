@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}作者精选 — RNTS{% endblock %}
+
+{% macro paper_row(p) %}
+<div class="paper-card paper-row">
+    <div class="paper-card-head">
+        <div class="paper-title">
+            <span class="tag tag-source">{{ source_names.get(p.source, p.source) }}</span>
+            <a href="/paper/{{ p.id }}">{{ p.title }}</a>
+        </div>
+        <span class="paper-head-right">
+            <small class="paper-date">{{ p.date_added[:10] if p.date_added else '' }}</small>
+            {% with paper_id = p.id, faved = p.id in favorite_ids %}
+                {% include "partials/fav_button.html" %}
+            {% endwith %}
+        </span>
+    </div>
+    <div class="paper-meta">
+        {{ p.authors[:150] if p.authors and p.authors != 'unknown' else '' }}
+        {% if p.authors and p.authors|length > 150 %}...{% endif %}
+    </div>
+    {% if p.keyword_list %}
+    <div>
+        {% for kw in p.keyword_list %}
+        <span class="tag tag-keyword">{{ kw }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% macro author_tabs(section_id, authors) %}
+{% if authors %}
+<div class="author-tabs" data-section="{{ section_id }}">
+    {% for a in authors %}
+    <button class="author-tab{{ ' active' if loop.first else '' }}"
+            data-tab="{{ section_id }}-{{ loop.index }}">
+        {{ a.name }}<span class="tab-count">{{ a.papers|length }}</span>
+    </button>
+    {% endfor %}
+</div>
+<div class="author-panels">
+    {% for a in authors %}
+    <div class="author-panel{{ ' active' if loop.first else '' }}" id="{{ section_id }}-{{ loop.index }}">
+        <p class="author-panel-head">
+            <strong>{{ a.name }}</strong> · 近一年 {{ a.papers|length }} 篇
+        </p>
+        {% for p in a.papers %}
+            {{ paper_row(p) }}
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty-hint">该区块暂无作者命中论文。</p>
+{% endif %}
+{% endmacro %}
+
+{% block content %}
+<div class="page-head">
+    <h2>🌐 近一年作者精选</h2>
+    <p class="page-head-meta">
+        {{ date_from }} ~ 今天 · 作者命中论文 {{ total_papers }} 篇 ·
+        点击作者标签快速跳转查看其论文 ·
+        <a href="/api/v1/papers/report_authors?format=html">下载 HTML 报告</a> ·
+        <a href="/api/v1/papers/report_authors">下载 Markdown</a>
+    </p>
+</div>
+
+<section class="author-section">
+    <h3 class="section-title">🌍 国际团队</h3>
+    {{ author_tabs('intl', intl_authors) }}
+</section>
+
+<section class="author-section">
+    <h3 class="section-title">🇨🇳 国内团队</h3>
+    {{ author_tabs('cn', cn_authors) }}
+</section>
+
+<script>
+// 作者标签切换：点击标签显示对应作者的论文面板
+document.querySelectorAll('.author-tabs').forEach(function (tabs) {
+    tabs.addEventListener('click', function (e) {
+        var btn = e.target.closest('.author-tab');
+        if (!btn) return;
+        var section = tabs.closest('.author-section');
+        section.querySelectorAll('.author-tab').forEach(function (t) { t.classList.remove('active'); });
+        section.querySelectorAll('.author-panel').forEach(function (p) { p.classList.remove('active'); });
+        btn.classList.add('active');
+        var panel = section.querySelector('#' + CSS.escape(btn.dataset.tab));
+        if (panel) panel.classList.add('active');
+    });
+});
+</script>
+{% endblock %}

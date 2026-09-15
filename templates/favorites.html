@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+{% block title %}我的收藏 — RNTS{% endblock %}
+
+{% block content %}
+<div class="fav-layout">
+    <!-- 分组侧栏 -->
+    <aside class="group-panel">
+        <h3>收藏夹</h3>
+        <nav class="group-nav">
+            <a href="/favorites" class="group-item{{ ' active' if current_group == 0 else '' }}">
+                <span>📚 全部收藏</span><span class="group-count">{{ total_fav }}</span>
+            </a>
+            <a href="/favorites?group=-1" class="group-item{{ ' active' if current_group == -1 else '' }}">
+                <span>📥 未分组</span><span class="group-count">{{ ungrouped_fav }}</span>
+            </a>
+            {% for g in groups %}
+            <a href="/favorites?group={{ g.id }}"
+               class="group-item{{ ' active' if current_group == g.id else '' }}">
+                <span>🗂 {{ g.name }}</span>
+                <span class="group-count">{{ group_counts.get(g.id, 0) }}</span>
+            </a>
+            {% endfor %}
+        </nav>
+
+        <form class="group-new" onsubmit="createGroup(this); return false;">
+            <input type="text" name="name" placeholder="新建分组..." required>
+            <button type="submit" class="outline" style="font-size: 0.8rem;">添加</button>
+        </form>
+
+        {% if current_group > 0 %}
+        {% set cur = groups | selectattr('id', 'equalto', current_group) | list %}
+        {% if cur %}
+        <div class="group-actions">
+            <button class="outline small-btn" onclick="renameGroup({{ cur[0].id }}, '{{ cur[0].name | e }}')">重命名当前分组</button>
+            <button class="outline small-btn" onclick="deleteGroup({{ cur[0].id }}, '{{ cur[0].name | e }}')">删除当前分组</button>
+        </div>
+        {% endif %}
+        {% endif %}
+    </aside>
+
+    <!-- 收藏列表 -->
+    <div class="fav-main">
+        <div class="fav-toolbar">
+            <form method="get" action="/favorites" class="fav-search">
+                {% if current_group %}<input type="hidden" name="group" value="{{ current_group }}">{% endif %}
+                <input type="search" name="search" value="{{ search }}" placeholder="搜索标题或备注...">
+                <button type="submit" class="outline" style="font-size: 0.85rem;">搜索</button>
+            </form>
+            <small class="fav-total">共 {{ favorites|length }} 篇收藏</small>
+        </div>
+
+        {% if favorites %}
+            {% for fav in favorites %}
+            <div class="paper-card fav-card">
+                <div class="paper-card-head">
+                    <div class="paper-title">
+                        <span class="tag tag-source">{{ fav.paper.source }}</span>
+                        <a href="/paper/{{ fav.paper.id }}">{{ fav.paper.title }}</a>
+                    </div>
+                    <span class="fav-star">★</span>
+                </div>
+                <div class="paper-meta">
+                    {{ fav.paper.authors[:150] if fav.paper.authors and fav.paper.authors != 'unknown' else '' }}
+                    · 📅 {{ fav.paper.date_added[:10] if fav.paper.date_added else '' }}
+                </div>
+
+                <div class="fav-groups">
+                    {% for g in fav.groups %}
+                    <span class="tag tag-group">🗂 {{ g.name }}
+                        <button class="tag-x" title="移出分组"
+                                onclick="removeFromGroup({{ fav.paper_id }}, {{ g.id }})">×</button>
+                    </span>
+                    {% else %}
+                    <span class="muted-hint">未分组</span>
+                    {% endfor %}
+                    <button class="link-btn" onclick="openGroupDialog({{ fav.paper_id }})">+ 调整分组</button>
+                </div>
+
+                {% if fav.note %}
+                <p class="fav-note">📝 {{ fav.note }}</p>
+                {% endif %}
+
+                <div class="fav-actions">
+                    {% if fav.pdf_path %}
+                    <a href="/api/v1/favorites/{{ fav.paper_id }}/pdf" target="_blank" class="pdf-badge">
+                        📄 {{ fav.pdf_name or 'PDF' }}
+                    </a>
+                    <small class="pdf-origin">{{ '上传副本' if fav.pdf_origin == 'upload' else '本地路径' }}</small>
+                    <button class="outline small-btn" onclick="removePdf({{ fav.paper_id }})">移除附件</button>
+                    {% else %}
+                    <button class="outline small-btn" onclick="pickUpload({{ fav.paper_id }})">📎 上传 PDF</button>
+                    <button class="outline small-btn" onclick="attachLocalPath({{ fav.paper_id }})">🔗 挂本地路径</button>
+                    {% endif %}
+                    <button class="outline small-btn" onclick="editNote({{ fav.paper_id }})">📝 备注</button>
+                    <button class="outline small-btn danger" onclick="unfavorite({{ fav.paper_id }})">取消收藏</button>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="empty-hint">
+                暂无收藏。去<a href="/">论文列表</a>点击卡片右上角的 ☆ 即可收藏，
+                然后在这里建立分组、添加备注和 PDF 附件。
+            </p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- 调整分组对话框 -->
+<dialog id="group-dialog">
+    <h4>调整分组归属</h4>
+    <div id="group-dialog-list">
+        {% for g in groups %}
+        <label class="dialog-check">
+            <input type="checkbox" value="{{ g.id }}"> 🗂 {{ g.name }}
+        </label>
+        {% endfor %}
+    </div>
+    <menu class="dialog-menu">
+        <button class="outline" type="button" onclick="closeGroupDialog()">取消</button>
+        <button type="button" onclick="saveGroups()">保存</button>
+    </menu>
+</dialog>
+
+<!-- 备注对话框 -->
+<dialog id="note-dialog">
+    <h4>收藏备注</h4>
+    <textarea id="note-input" rows="4" placeholder="记录为什么收藏、重点看哪里..."></textarea>
+    <menu class="dialog-menu">
+        <button class="outline" type="button" onclick="document.getElementById('note-dialog').close()">取消</button>
+        <button type="button" onclick="saveNote()">保存</button>
+    </menu>
+</dialog>
+
+<!-- 本地 PDF 路径对话框 -->
+<dialog id="path-dialog">
+    <h4>挂载本地 PDF</h4>
+    <p class="muted-hint">输入本机 PDF 文件的完整路径（不复制文件，通过本系统在线预览）。</p>
+    <input type="text" id="path-input" placeholder="例如 D:\papers\some_paper.pdf">
+    <menu class="dialog-menu">
+        <button class="outline" type="button" onclick="document.getElementById('path-dialog').close()">取消</button>
+        <button type="button" onclick="savePath()">挂载</button>
+    </menu>
+</dialog>
+
+<!-- 重命名分组对话框 -->
+<dialog id="rename-dialog">
+    <h4>重命名分组</h4>
+    <input type="text" id="rename-input" placeholder="新的分组名">
+    <menu class="dialog-menu">
+        <button class="outline" type="button" onclick="document.getElementById('rename-dialog').close()">取消</button>
+        <button type="button" onclick="saveRename()">保存</button>
+    </menu>
+</dialog>
+
+<!-- 上传 PDF 的隐藏文件选择器 -->
+<input type="file" id="pdf-input" accept=".pdf" style="display: none;">
+
+<script>
+let groupPaperId = null;
+let uploadPaperId = null;
+let renameGroupId = null;
+
+function api(url, method, body, isJson = true) {
+    const opts = { method: method };
+    if (body !== undefined) {
+        if (isJson) { opts.headers = {'Content-Type': 'application/json'}; opts.body = JSON.stringify(body); }
+        else { opts.body = body; }
+    }
+    return fetch(url, opts).then(async r => {
+        if (!r.ok) {
+            const data = await r.json().catch(() => ({}));
+            throw new Error(data.error || r.statusText);
+        }
+        return r.json();
+    });
+}
+
+function reload() { location.reload(); }
+function fail(e) { alert('操作失败: ' + e.message); }
+
+// —— 分组管理 ——
+function createGroup(form) {
+    api('/api/v1/favorites/groups', 'POST', {name: form.name.value})
+        .then(reload).catch(fail);
+}
+function renameGroup(id, oldName) {
+    renameGroupId = id;
+    document.getElementById('rename-input').value = oldName;
+    document.getElementById('rename-dialog').showModal();
+}
+function saveRename() {
+    const name = document.getElementById('rename-input').value.trim();
+    if (name) api(`/api/v1/favorites/groups/${renameGroupId}`, 'PUT', {name}).then(reload).catch(fail);
+}
+function deleteGroup(id, name) {
+    if (confirm(`删除分组「${name}」？\n组内收藏不会被删除，只是解除归属。`)) {
+        api(`/api/v1/favorites/groups/${id}`, 'DELETE').then(reload).catch(fail);
+    }
+}
+
+// —— 收藏操作 ——
+function unfavorite(paperId) {
+    if (confirm('确定取消收藏这篇文献？')) {
+        api(`/api/v1/favorites/${paperId}`, 'DELETE').then(reload).catch(fail);
+    }
+}
+function editNote(paperId) {
+    groupPaperId = paperId;
+    api(`/api/v1/favorites/${paperId}`, 'GET').then(cur => {
+        document.getElementById('note-input').value = cur.note || '';
+        document.getElementById('note-dialog').showModal();
+    }).catch(fail);
+}
+function saveNote() {
+    const note = document.getElementById('note-input').value;
+    api(`/api/v1/favorites/${groupPaperId}`, 'PUT', {note: note}).then(reload).catch(fail);
+}
+function removeFromGroup(paperId, groupId) {
+    api(`/api/v1/favorites/${paperId}/groups/${groupId}`, 'DELETE').then(reload).catch(fail);
+}
+
+// —— 分组对话框 ——
+function openGroupDialog(paperId) {
+    groupPaperId = paperId;
+    api(`/api/v1/favorites/${paperId}`, 'GET').then(current => {
+        const ids = current.group_ids || [];
+        document.querySelectorAll('#group-dialog-list input').forEach(cb => {
+            cb.checked = ids.includes(Number(cb.value));
+        });
+        document.getElementById('group-dialog').showModal();
+    }).catch(fail);
+}
+function closeGroupDialog() {
+    document.getElementById('group-dialog').close();
+}
+function saveGroups() {
+    const ids = Array.from(document.querySelectorAll('#group-dialog-list input:checked'))
+        .map(cb => Number(cb.value));
+    api(`/api/v1/favorites/${groupPaperId}`, 'PUT', {group_ids: ids})
+        .then(reload).catch(fail);
+}
+
+// —— PDF 附件 ——
+function pickUpload(paperId) {
+    uploadPaperId = paperId;
+    const input = document.getElementById('pdf-input');
+    input.value = '';
+    input.click();
+}
+document.getElementById('pdf-input').addEventListener('change', function () {
+    if (!this.files.length || !uploadPaperId) return;
+    const fd = new FormData();
+    fd.append('file', this.files[0]);
+    api(`/api/v1/favorites/${uploadPaperId}/pdf`, 'POST', fd, false)
+        .then(reload).catch(fail);
+});
+function attachLocalPath(paperId) {
+    groupPaperId = paperId;
+    document.getElementById('path-input').value = '';
+    document.getElementById('path-dialog').showModal();
+}
+function savePath() {
+    const path = document.getElementById('path-input').value.trim();
+    if (!path) return;
+    api(`/api/v1/favorites/${groupPaperId}/pdf`, 'PUT', {path: path}).then(reload).catch(fail);
+}
+function removePdf(paperId) {
+    if (confirm('移除该 PDF 附件？')) {
+        api(`/api/v1/favorites/${paperId}/pdf`, 'DELETE').then(reload).catch(fail);
+    }
+}
+</script>
+{% endblock %}

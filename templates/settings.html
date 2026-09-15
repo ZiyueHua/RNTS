@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}设置 — RNTS{% endblock %}
+
+{% block content %}
+<h2>系统设置</h2>
+<p style="color: var(--pico-muted-color);">
+    管理 RSS 源、关键词和高亮作者。修改后立即生效，下次抓取将使用新配置。
+</p>
+
+{# RSS 源管理 #}
+<div class="config-section">
+    <h3>RSS 源（{{ config.rss_sources | length }} 个）</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>名称</th>
+                <th>显示名</th>
+                <th>提取器</th>
+                <th>状态</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for s in config.rss_sources %}
+            <tr>
+                <td><code>{{ s.name }}</code></td>
+                <td>{{ s.display_name }}</td>
+                <td>{{ s.extractor }}</td>
+                <td>{% if s.enabled %}✅ 启用{% else %}⏸️ 停用{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <small style="color: var(--pico-muted-color);">
+        RSS 源的增删请直接编辑 <code>config/config.yaml</code> 文件后点击下方「重新加载」。
+    </small>
+</div>
+
+{# 关键词管理 #}
+<div class="config-section">
+    <h3>关键词（{{ config.keywords | length }} 个）</h3>
+    <p style="font-size: 0.85rem; color: var(--pico-muted-color);">
+        匹配论文标题和摘要（不区分大小写，使用单词边界匹配）
+    </p>
+    <div class="config-list" id="keywords-list">
+        {% for kw in config.keywords %}
+        <span class="config-chip">
+            {{ kw }}
+            <button onclick="deleteKeyword('{{ kw }}')" title="删除">×</button>
+        </span>
+        {% endfor %}
+    </div>
+    <div class="add-form">
+        <input type="text" id="new-keyword" placeholder="输入新关键词...">
+        <button onclick="addKeyword()">添加</button>
+    </div>
+</div>
+
+{# 高亮作者 - 国际 #}
+<div class="config-section">
+    <h3>高亮作者 — 国际团队（{{ config.highlight_authors_1 | length }} 人）</h3>
+    <div class="config-list" id="authors1-list">
+        {% for au in config.highlight_authors_1 %}
+        <span class="config-chip">
+            {{ au }}
+            <button onclick="deleteAuthor('{{ au }}', 1)" title="删除">×</button>
+        </span>
+        {% endfor %}
+    </div>
+    <div class="add-form">
+        <input type="text" id="new-author-1" placeholder="输入作者名...">
+        <button onclick="addAuthor(1)">添加</button>
+    </div>
+</div>
+
+{# 高亮作者 - 国内 #}
+<div class="config-section">
+    <h3>高亮作者 — 国内团队（{{ config.highlight_authors_2 | length }} 人）</h3>
+    <div class="config-list" id="authors2-list">
+        {% for au in config.highlight_authors_2 %}
+        <span class="config-chip">
+            {{ au }}
+            <button onclick="deleteAuthor('{{ au }}', 2)" title="删除">×</button>
+        </span>
+        {% endfor %}
+    </div>
+    <div class="add-form">
+        <input type="text" id="new-author-2" placeholder="输入作者名...">
+        <button onclick="addAuthor(2)">添加</button>
+    </div>
+</div>
+
+{# 调度配置 #}
+<div class="config-section">
+    <h3>调度配置</h3>
+    <table>
+        <tr>
+            <td style="color: var(--pico-muted-color);">每日自动抓取时间</td>
+            <td>{{ config.schedule.daily_fetch_time }}</td>
+        </tr>
+        <tr>
+            <td style="color: var(--pico-muted-color);">请求超时</td>
+            <td>{{ config.schedule.fetch_timeout }} 秒</td>
+        </tr>
+        <tr>
+            <td style="color: var(--pico-muted-color);">并发数</td>
+            <td>{{ config.schedule.max_concurrent }}</td>
+        </tr>
+        <tr>
+            <td style="color: var(--pico-muted-color);">每页显示</td>
+            <td>{{ config.schedule.per_page }} 篇</td>
+        </tr>
+        <tr>
+            <td style="color: var(--pico-muted-color);">arXiv 抓取回溯</td>
+            <td>{{ config.schedule.arxiv_lookback_days }} 天</td>
+        </tr>
+    </table>
+    <small style="color: var(--pico-muted-color);">
+        arXiv 抓取按提交日期（submittedDate）区间取全量，不再受单次条数上限截断。
+        「回溯天数」同时用于每日自动抓取（取今天往前 N 天）和顶部导航栏的
+        「⟳ 补抓 arXiv」（取选定日期往前 N 天）。设为 0 则只取当天提交的论文。
+        调度配置请编辑 <code>config/config.yaml</code> 后重新加载。
+    </small>
+</div>
+
+<button onclick="reloadConfig()">重新加载配置文件</button>
+
+<script>
+function addKeyword() {
+    const kw = document.getElementById('new-keyword').value.trim();
+    if (!kw) return;
+    fetch(`/api/v1/config/keywords?keyword=${encodeURIComponent(kw)}`, {method: 'POST'})
+        .then(r => r.json()).then(() => location.reload());
+}
+
+function deleteKeyword(kw) {
+    if (!confirm(`删除关键词 "${kw}"？`)) return;
+    fetch(`/api/v1/config/keywords/${encodeURIComponent(kw)}`, {method: 'DELETE'})
+        .then(r => r.json()).then(() => location.reload());
+}
+
+function addAuthor(group) {
+    const au = document.getElementById(`new-author-${group}`).value.trim();
+    if (!au) return;
+    fetch(`/api/v1/config/authors?author=${encodeURIComponent(au)}&group=${group}`, {method: 'POST'})
+        .then(r => r.json()).then(() => location.reload());
+}
+
+function deleteAuthor(au, group) {
+    if (!confirm(`删除作者 "${au}"？`)) return;
+    fetch(`/api/v1/config/authors/${encodeURIComponent(au)}?group=${group}`, {method: 'DELETE'})
+        .then(r => r.json()).then(() => location.reload());
+}
+
+function reloadConfig() {
+    fetch('/api/v1/config/reload', {method: 'POST'})
+        .then(r => r.json()).then(data => {
+            alert('配置已重新加载');
+            location.reload();
+        });
+}
+</script>
+{% endblock %}

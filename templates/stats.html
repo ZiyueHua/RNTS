@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}统计 — RNTS{% endblock %}
+
+{% block content %}
+<h2>统计仪表盘</h2>
+
+{# 数字卡片 #}
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ total }}</div>
+        <div class="stat-label">论文总数</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ today_new }}</div>
+        <div class="stat-label">今日新增</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ week_new }}</div>
+        <div class="stat-label">本周新增</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ highlighted }}</div>
+        <div class="stat-label">高亮作者命中</div>
+    </div>
+</div>
+
+{# 趋势图 #}
+<div class="chart-container">
+    <h3>近 30 天新增趋势</h3>
+    <canvas id="trend-chart"></canvas>
+</div>
+
+{# 来源占比 + 作者排行 #}
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+    <div class="chart-container">
+        <h3>各来源占比</h3>
+        <canvas id="source-chart"></canvas>
+    </div>
+    <div class="chart-container">
+        <h3>高亮作者命中排行 Top 15</h3>
+        <ul class="rank-list">
+            {% for au, count in top_authors %}
+            <li>
+                <span><span class="rank-num">{{ loop.index }}</span>{{ au }}</span>
+                <span class="rank-count">{{ count }}</span>
+            </li>
+            {% else %}
+            <li style="color: var(--pico-muted-color);">暂无数据</li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+
+{# 关键词排行 #}
+<div class="chart-container">
+    <h3>关键词命中排行 Top 15</h3>
+    <ul class="rank-list" style="columns: 2;">
+        {% for kw, count in top_keywords %}
+        <li>
+            <span><span class="rank-num">{{ loop.index }}</span>{{ kw }}</span>
+            <span class="rank-count">{{ count }}</span>
+        </li>
+        {% else %}
+        <li style="color: var(--pico-muted-color);">暂无数据</li>
+        {% endfor %}
+    </ul>
+</div>
+
+<script>
+// 趋势图
+const trendData = {{ trend | tojson }};
+new Chart(document.getElementById('trend-chart'), {
+    type: 'line',
+    data: {
+        labels: trendData.map(d => d[0]),
+        datasets: [{
+            label: '新增论文数',
+            data: trendData.map(d => d[1]),
+            borderColor: 'rgb(21, 101, 192)',
+            backgroundColor: 'rgba(21, 101, 192, 0.1)',
+            fill: true,
+            tension: 0.3,
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: { y: { beginAtZero: true } }
+    }
+});
+
+// 来源饼图
+const sourceData = {{ by_source | tojson }};
+new Chart(document.getElementById('source-chart'), {
+    type: 'doughnut',
+    data: {
+        labels: sourceData.map(d => d[0]),
+        datasets: [{
+            data: sourceData.map(d => d[1]),
+        }]
+    },
+    options: {
+        responsive: true,
+    }
+});
+</script>
+{% endblock %}

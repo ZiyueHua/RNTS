@@ -1,0 +1,82 @@
+{# 论文列表片段（HTMX 局部刷新） #}
+
+{# 翻页链接的公共查询串：带上全部筛选条件，保证翻页不丢条件 #}
+{% set extra %}{% if filters.source %}&source={{ filters.source }}{% endif %}{% if filters.author_group %}&author_group={{ filters.author_group }}{% endif %}{% if filters.keyword %}&keyword={{ filters.keyword }}{% endif %}{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.date_from %}&date_from={{ filters.date_from }}{% endif %}{% if filters.date_to %}&date_to={{ filters.date_to }}{% endif %}{% if filters.per_page %}&per_page={{ filters.per_page }}{% endif %}{% if not filters.matched_only %}&matched_only=0{% endif %}{% endset %}
+
+<div class="paper-count">
+    <small>共 {{ total }} 篇，第 {{ page }}/{{ total_pages }} 页
+        {%- if filters.matched_only %} · 仅命中文献{% else %} · 全部文献{% endif %}</small>
+</div>
+
+{% if papers %}
+    {% for paper in papers %}
+    <div class="paper-card">
+        <div class="paper-card-head">
+            <div class="paper-title">
+                <span class="tag tag-source">{{ paper.source }}</span>
+                <a href="/paper/{{ paper.id }}">{{ paper.title }}</a>
+            </div>
+            {% with paper_id = paper.id, faved = paper.id in favorite_ids %}
+                {% include "partials/fav_button.html" %}
+            {% endwith %}
+        </div>
+        <div class="paper-meta">
+            {{ paper.authors[:200] if paper.authors and paper.authors != 'unknown' else '' }}
+            {% if paper.authors and paper.authors|length > 200 %}...{% endif %}
+        </div>
+        <div class="paper-meta">
+            📅 {{ paper.date_added[:10] if paper.date_added else '' }}
+        </div>
+        <div class="paper-summary">
+            {{ paper.summary[:300] if paper.summary else '' }}
+            {% if paper.summary and paper.summary|length > 300 %}...{% endif %}
+        </div>
+        <div>
+            {% for kw in paper.keyword_list %}
+            <span class="tag tag-keyword">{{ kw }}</span>
+            {% endfor %}
+            {% for au in paper.author_list %}
+            <span class="tag {% if paper.author_group in [1, 3] %}tag-author-intl{% else %}tag-author{% endif %}">{{ au }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+
+    {# 分页 #}
+    <div class="pagination">
+        {% if page > 1 %}
+        <a hx-get="/?page={{ page - 1 }}{{ extra }}" hx-target="#paper-list" hx-push-url="true">‹ 上一页</a>
+        {% endif %}
+
+        {% if page > 3 %}
+        <a hx-get="/?page=1{{ extra }}" hx-target="#paper-list" hx-push-url="true">1</a>
+        <span>...</span>
+        {% endif %}
+
+        {% for p in page_range %}
+        {% if p == page %}
+        <span class="current">{{ p }}</span>
+        {% else %}
+        <a hx-get="/?page={{ p }}{{ extra }}" hx-target="#paper-list" hx-push-url="true">{{ p }}</a>
+        {% endif %}
+        {% endfor %}
+
+        {% if page < total_pages - 2 %}
+        <span>...</span>
+        <a hx-get="/?page={{ total_pages }}{{ extra }}" hx-target="#paper-list" hx-push-url="true">{{ total_pages }}</a>
+        {% endif %}
+
+        {% if page < total_pages %}
+        <a hx-get="/?page={{ page + 1 }}{{ extra }}" hx-target="#paper-list" hx-push-url="true">下一页 ›</a>
+        {% endif %}
+    </div>
+{% else %}
+    <p class="empty-hint">
+        {% if filters.matched_only %}
+        当前筛选条件下没有命中的论文。可以取消左下角的「只显示命中关键词 / 作者」查看库中全部文献，
+        或在「设置」里补充关键词 / 高亮作者。
+        {% else %}
+        暂无符合条件的论文。尝试调整筛选条件，或点击右上角「⟳ 手动抓取」。
+        {% endif %}
+    </p>
+{% endif %}

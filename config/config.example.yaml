@@ -1,0 +1,110 @@
+# ============================================================
+# RNTS 配置模板（config.example.yaml）
+#
+# 用法：第一次部署时把它复制成同目录下的 config.yaml：
+#     copy config\config.example.yaml config\config.yaml
+#   程序在 config.yaml 不存在时也会自动复制一份（app/config.py）。
+#
+# 说明：config.yaml 是你自己的配置（关键词 / 关注作者 / 云盘目录），
+# 不在版本控制里，升级版本时不会被覆盖；本模板才会随版本更新。
+# ============================================================
+
+rss_sources:
+- name: arxiv
+  display_name: arXiv (quant-ph)
+  # v1.1.1：URL 只保留分类条件，程序会按 schedule.arxiv_lookback_days 自动追加
+  # submittedDate 区间并翻页取全量（不再被 max_results 截断）。不要写死 start / max_results。
+  url: https://export.arxiv.org/api/query?search_query=cat:quant-ph&sortBy=submittedDate&sortOrder=descending
+  extractor: arxiv
+  enabled: true
+- name: nature
+  display_name: Nature
+  url: https://www.nature.com/nature.rss
+  extractor: nature
+  enabled: true
+- name: nature_physics
+  display_name: Nature Physics
+  url: https://feeds.nature.com/nphys/rss/current
+  extractor: nature
+  enabled: true
+- name: nature_comms
+  display_name: Nature Communications
+  url: https://www.nature.com/ncomms.rss
+  extractor: nature
+  enabled: true
+- name: npj_qi
+  display_name: npj Quantum Information
+  url: https://www.nature.com/npjqi.rss
+  extractor: nature
+  enabled: true
+- name: science
+  display_name: Science
+  url: https://www.science.org/action/showFeed?type=axatoc&feed=rss&jc=science
+  extractor: science
+  enabled: true
+- name: science_advances
+  display_name: Science Advances
+  url: https://www.science.org/action/showFeed?type=etoc&feed=rss&jc=sciadv
+  extractor: science
+  enabled: true
+- name: prl
+  display_name: Physical Review Letters
+  url: https://feeds.aps.org/rss/recent/prl.xml
+  extractor: prl
+  enabled: true
+- name: prapplied
+  display_name: Physical Review Applied
+  url: https://feeds.aps.org/rss/recent/prapplied.xml
+  extractor: prl
+  enabled: true
+- name: prx
+  display_name: Physical Review X
+  url: https://feeds.aps.org/rss/recent/prx.xml
+  extractor: prl
+  enabled: true
+- name: prx_quantum
+  display_name: PRX Quantum
+  url: https://feeds.aps.org/rss/recent/prxquantum.xml
+  extractor: prl
+  enabled: true
+- name: apl
+  display_name: Applied Physics Letters
+  url: https://pubs.aip.org/rss/site_1000017/1000011.xml
+  extractor: apl
+  enabled: true
+
+# 命中任意一个关键词的论文才会进「今日更新」。改成你自己的词表。
+keywords:
+- amplifier
+- bosonic
+- cat state
+- circuit QED
+- fluxonium
+- qubit
+- superconducting qubit
+- transmon
+- TWPA
+
+# 高亮作者（第一组）。命中后在列表里高亮 + 单独出报告。
+# 匹配规则：大小写、空格、变音符号都不敏感（Jürgen / Juergen / Jurgen 互通），
+# 支持「名 姓」与首字母缩写互换；行尾可用 # 写备注（如所在机构）。
+highlight_authors_1:
+- Example Author  # 改成你关注的作者，# 后面是备注，不会被当成名字
+
+# 高亮作者（第二组）：报告里与第一组分开统计。不需要就留空列表（写 []，不要整个空着）。
+highlight_authors_2: []
+schedule:
+  daily_fetch_time: 08:00
+  fetch_timeout: 30
+  max_concurrent: 6
+  per_page: 20
+  # v1.1.1：arXiv 回溯天数。每日抓取取 [今天-N, 今天] 提交的全部 quant-ph 论文，
+  # 网页端「补抓 arXiv」取 [选定日期-N, 选定日期]。0 表示只取当天提交。
+  arxiv_lookback_days: 3
+cloud_sync:
+  enabled: false
+  # 可选：启用后报告会自动复制到该目录（坚果云/OneDrive 等同步根内的子目录），便于手机端查看
+  dir: ""
+  formats:
+  - html
+  - md

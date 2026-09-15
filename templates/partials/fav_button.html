@@ -1,0 +1,8 @@
+{# 收藏星标按钮（HTMX 局部刷新片段，toggle 后整体替换自身） #}
+<button class="fav-btn{{ ' faved' if faved else '' }}"
+        hx-post="/api/v1/favorites/{{ paper_id }}/toggle"
+        hx-target="this" hx-swap="outerHTML"
+        aria-label="{{ '取消收藏' if faved else '收藏' }}"
+        title="{{ '取消收藏' if faved else '收藏' }}">
+    {{ '★' if faved else '☆' }}
+</button>

@@ -1,0 +1,26 @@
+# ============================================================
+# RNTS 换行约定 —— 务必保留，否则 Windows 上脚本会失效
+#   .bat/.cmd/.ps1 必须 CRLF，.sh/.py 必须 LF
+#   （cmd 用 GBK 逐字节解析 .bat，换行不对会吞行导致脚本跑不起来）
+# ============================================================
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+*.sh   text eol=lf
+*.py   text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.html text eol=lf
+*.css  text eol=lf
+*.js   text eol=lf
+*.txt  text eol=lf
+
+# 二进制，禁止 git 做换行/差异处理
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.db binary
