@@ -12,7 +12,7 @@
 | # | 事项 | 说明 |
 |---|------|------|
 | 1 | **可见性** | **私有**。GitHub 没有"拿到链接就能看"的分享方式，私有仓库必须把对方加成协作者（见第二·五节的邀请步骤）。以后转公开只需改一个开关，但**转公开时全部提交历史一起公开**，所以私有期间也别往里塞敏感内容。 |
-| 2 | **许可证** | 已放 MIT `LICENSE`（代码含合作者贡献，需其同意；leader 已确认获授权）。 |
+| 2 | **许可证** | 已放 MIT `LICENSE`，版权人署 `ZiyueHua`（2026-09-15 定）。代码含合作者贡献（v1.1.0/v1.1.1），**私有阶段无影响**；将来转公开前建议和对方确认一句。 |
 | 3 | **数据库 / 配置** | 都不传。`data/` 与 `config/config.yaml` 已在 `.gitignore` 里，仓库只跟踪模板 `config/config.example.yaml`。 |
 | 4 | **国内网络** | GitHub 在国内是「时通时断」而非完全不通（详见第七节）。如果你或协作者拉不动代码，备选方案见第七节末尾。 |
 
@@ -98,6 +98,20 @@ git branch -M main
 git push -u origin main
 git push origin v1.1.1
 ```
+
+> **首次 push 会弹一次认证**（Windows 上的 Git Credential Manager 会自动开浏览器让你登录 GitHub）。
+> 登录一次后凭据会存进「Windows 凭据管理器」，以后 push 不再问。若没弹窗、直接在命令行卡住或报
+> `Authentication failed`，在 Git Bash 里手动跑一次 `git push -u origin main` 就会触发弹窗。
+>
+> 本次已替你配好 `origin` 指向 `https://github.com/ZiyueHua/RNTS.git`，本地提交与 `v1.1.1`
+> 标签都已就绪 —— **网页建好仓库后，只需在 `rnts/` 目录跑这一条**：
+>
+> ```bash
+> git push -u origin main --tags
+> ```
+>
+> 如果你把仓库名起成别的（不叫 `RNTS`），先改地址再推：
+> `git remote set-url origin https://github.com/ZiyueHua/<你的仓库名>.git`
 
 ---
 
