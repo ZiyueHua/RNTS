@@ -1,11 +1,23 @@
 # ============================================================
 # RNTS 换行约定 —— 务必保留，否则 Windows 上脚本会失效
-#   .bat/.cmd/.ps1 必须 CRLF，.sh/.py 必须 LF
+#   .bat/.cmd/.ps1 必须 CRLF，其余文本一律 LF
 #   （cmd 用 GBK 逐字节解析 .bat，换行不对会吞行导致脚本跑不起来）
+#
+# 规则顺序很重要：git 取「最后一条匹配的规则」，所以兜底规则放最前，
+# 具体扩展名放后面覆盖它。core.autocrlf 是全局设置，不写这条兜底，
+# 没被列到的文件（LICENSE / Dockerfile / 以后新增的配置）就会随
+# 各人机器设置漂移。
 # ============================================================
+
+# 兜底：所有文本文件仓库内统一存 LF，检出也 LF（二进制会被自动识别跳过）
+* text=auto eol=lf
+
+# Windows 脚本：必须 CRLF
 *.bat  text eol=crlf
 *.cmd  text eol=crlf
 *.ps1  text eol=crlf
+
+# 其余文本：显式声明 LF（写出来是给以后改的人看的，实际由兜底规则保证）
 *.sh   text eol=lf
 *.py   text eol=lf
 *.md   text eol=lf
@@ -15,12 +27,21 @@
 *.css  text eol=lf
 *.js   text eol=lf
 *.txt  text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.cfg  text eol=lf
+
+# 无扩展名的关键文本文件
+LICENSE          text eol=lf
+Dockerfile       text eol=lf
+.gitignore       text eol=lf
+.gitattributes   text eol=lf
 
 # 二进制，禁止 git 做换行/差异处理
-*.png binary
-*.jpg binary
+*.png  binary
+*.jpg  binary
 *.jpeg binary
-*.gif binary
-*.ico binary
-*.pdf binary
-*.db binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.db   binary
