@@ -85,6 +85,11 @@ git tag -a v1.1.1 -m "v1.1.1"
 
 ## 三、创建远端仓库并推送
 
+> ⚠ **如果你的网络和本机一样（见 7.1）：`github.com` 的 HTTPS 走不通**，本节两种方式都会失败
+> （网页打不开、`gh auth login` 卡住、`git push` 报 `Empty reply from server`）。
+> 先按 7.1 的三条路线之一解决传输问题，再回来执行本节。建仓库这一步可先用 7.1 的
+> 浏览器应急办法打开网页完成。
+
 ### 方式 A：用 GitHub CLI（推荐，一条命令）
 
 装 CLI（任选其一）：
@@ -215,20 +220,52 @@ README 里已经写了三分钟部署，核心两条：
 
 ## 七、国内访问 GitHub 与备选方案
 
-### 7.1 现状：不是上不去，是不稳定
+### 7.1 本机实测结论（2026-09-15，比「不稳定」更具体）
+
+不是「时通时断」，而是**DNS 解析出来的那一个 IP 被黑洞**：
+
+| 目标 | 实测结果 |
+|---|---|
+| `github.com` → `20.205.243.166`（本机 DNS 的答案） | **443 全部超时（0/5）** ← 就是它把网页和 HTTPS 推送一起堵死 |
+| `github.com` 换用其它 GitHub IP（`20.27.177.113`、`140.82.112.3` 等） | **5/5 通，HTTP 200 + 证书有效** |
+| `api.github.com` / `codeload.github.com` / `raw.githubusercontent.com` / 静态资源 / 头像 | 全部正常 |
+| `gist.github.com` | 同样被墙（本项目用不到） |
+| SSH：`github.com:22`、`ssh.github.com:443` | **5/5 通**（真实 SSH banner）← 本机 22 端口并未被阻 |
+
+> **这不是 DNS 污染**：用加密 DNS（腾讯 DNSPod DoH）查询得到的是同一个 IP，
+> 它是 GitHub 的合法地址，只是这个地址在本网络被丢弃。
+> 典型报错：`fatal: unable to access 'https://github.com/...': Empty reply from server`。
+
+由此得出三条可行路线：**① 把 `github.com` 固定到可用 IP**（改 hosts，需管理员，最彻底）；
+**② 走 SSH**（免管理员、不受 IP 变动影响）；**③ 换 Gitee**。
+
+**免管理员的浏览器应急办法**（不改系统任何文件，只影响这一个浏览器实例）：
+
+```
+"C:\Program Files\Google\Chrome\Application\chrome.exe" ^
+  --user-data-dir="%LOCALAPPDATA%\RNTS-github-profile" ^
+  --host-resolver-rules="MAP github.com 20.27.177.113" ^
+  https://github.com/
+```
+
+必须带 `--user-data-dir`，否则浏览器已经在运行时新参数会被忽略、只多开一个标签页。
+备选 IP（当前不可用时可换）：`140.82.113.3`、`140.82.112.3`、`140.82.121.3`。
+工作区根目录已放了一份可直接双击的 `open_github.bat`。
+
+### 7.2 其余现象（仍然成立）
 
 | 现象 | 说明 |
 |---|---|
 | 网页时通时断 | 能打开但经常转圈或 502，重试多半能成 |
 | `git clone/push` 慢或超时 | 小仓库一般能过；大仓库容易断在中途 |
-| `raw.githubusercontent.com` | 基本不通（下载单文件常用不了） |
-| SSH（22 端口） | 经常被阻；改用 HTTPS 或让 SSH 走 443 端口成功率高 |
+| `raw.githubusercontent.com` | 部分网络不通（本机实测正常） |
+| SSH（22 端口） | 部分网络被阻；改用 `ssh.github.com:443` 成功率最高（本机 22 直接可用） |
 | 2025-04 | 曾出现短时「封禁中国 IP」事件（官方称技术故障）；GitLab 已退出中国市场 |
 
 **关键**：私有仓库**不能**用 ghproxy 那类公开加速镜像（只对公开内容有效）。
 私有协作要么自己解决网络，要么换国内平台。
 
-### 7.2 备选一：GitHub 主仓 + Gitee 镜像（推荐，改动最小）
+### 7.3 备选一：GitHub 主仓 + Gitee 镜像（推荐，改动最小）
 
 本地仓库配两个远端，一次推两边（本项目代码不到 1MB，推两处零成本）：
 
@@ -242,7 +279,7 @@ git push gitee main         # Gitee（国内通道 + 备份）
 
 以后拉对方的改动：`git pull origin main`，再 `git push gitee main` 同步过去。
 
-### 7.3 备选二：主仓直接放 Gitee
+### 7.4 备选二：主仓直接放 Gitee
 
 | 项 | Gitee 社区版（免费） |
 |---|---|
@@ -253,7 +290,7 @@ git push gitee main         # Gitee（国内通道 + 备份）
 
 Gitee 支持「从 GitHub 导入仓库」一键搬，也有仓库镜像同步功能，主次可以随时调换。
 
-### 7.4 其它可选
+### 7.5 其它可选
 
 - **腾讯云 CNB（cnb.cool）**：100GiB 代码存储 + 1600 核时/月免费算力，国内速度快（功能对这个小项目过剩）
 - **阿里云云效 Codeup**：基础版免费、人数不限、单仓 10GB
