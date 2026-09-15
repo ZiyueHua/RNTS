@@ -1,7 +1,7 @@
 # RNTS 本地部署说明（Local Deploy）
 
 将云端 RNTS v2.0 重新部署到本地 Windows 机器的完整记录。
-项目根目录：`E:\WorkBuddy\RNTS\rnts\`
+项目根目录：`<项目根目录>`（示例：`D:\RNTS`）
 
 > 云端版本因服务器不能 24 小时开机，故迁回本地常驻运行。
 > 本地环境无 Docker，因此采用 **Python 虚拟环境 + uvicorn 单进程** 部署，
@@ -42,7 +42,7 @@ rnts/
 ### 方式 A：手动前台运行（调试/临时）
 双击 `run.bat`，或命令行：
 ```bat
-cd E:\WorkBuddy\RNTS\rnts
+cd <项目根目录>
 .venv\Scripts\activate.bat
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
 ```
@@ -51,7 +51,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
 ### 方式 B：开机自启（推荐，常驻 24/7）
 以 PowerShell 运行：
 ```powershell
-cd E:\WorkBuddy\RNTS\rnts
+cd <项目根目录>
 powershell -ExecutionPolicy Bypass -File install_autostart.ps1
 ```
 注册后，每次用户登录自动在后台启动（无控制台窗口）。
@@ -59,7 +59,7 @@ powershell -ExecutionPolicy Bypass -File install_autostart.ps1
 - 卸载：`Unregister-ScheduledTask -TaskName "RNTS" -Confirm:$false`
 
 > 若希望「即使不登录也运行」，可在任务计划程序中把该任务改为以
-> `SYSTEM` 账户运行（AtStartup 触发），但需确保 `E:\` 对 SYSTEM 可写。
+> `SYSTEM` 账户运行（AtStartup 触发），但需确保项目所在盘符对 SYSTEM 可写。
 
 ## 5. 访问地址
 
@@ -89,7 +89,7 @@ powershell -ExecutionPolicy Bypass -File install_autostart.ps1
 
 若需再次从 `.txt` 导出包还原源码，运行：
 ```bat
-cd E:\WorkBuddy\RNTS
+cd <项目上级目录>
 python restore_project.py
 ```
 （该脚本按 `_INDEX.txt` 的 `__`→`/` 映射还原；`app/__init__.py` 的特殊 `__` 已单独处理。）
