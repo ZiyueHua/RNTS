@@ -17,6 +17,9 @@ rss_sources:
   url: https://export.arxiv.org/api/query?search_query=cat:quant-ph&sortBy=submittedDate&sortOrder=descending
   extractor: arxiv
   enabled: true
+  # 可选：arXiv 的「当日公告层」地址（v1.1.2 起默认按上面的 cat:xxx 自动推导，
+  # 即 https://rss.arxiv.org/rss/quant-ph；只有想改抓别的分类时才需要显式指定）。
+  # rss_url: https://rss.arxiv.org/rss/quant-ph
 - name: nature
   display_name: Nature
   url: https://www.nature.com/nature.rss

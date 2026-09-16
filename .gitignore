@@ -32,3 +32,10 @@ config/config.yaml
 Thumbs.db
 .idea/
 .vscode/
+
+# 本机专属（发布 zip、本地备份、工具会话产物）
+*.zip
+_backup_pre_v101/
+.zcode/
+make_release.py
+tools/

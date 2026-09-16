@@ -27,6 +27,10 @@ class RSSSource(BaseModel):
     url: str
     extractor: str = "arxiv"
     enabled: bool = True
+    # 可选：显式指定该源的 RSS 公告地址。arXiv 源不填时按 url 里 search_query 的
+    # cat:xxx 自动推导（cat:quant-ph → https://rss.arxiv.org/rss/quant-ph）；
+    # 填了则以它为准（例如想改抓别的分类或多个分类时）。
+    rss_url: str = ""
 
 
 class ScheduleConfig(BaseModel):

@@ -6,7 +6,7 @@ from datetime import date, datetime, timezone, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.config import load_config, get_enabled_sources
@@ -63,18 +63,52 @@ def _persist_papers(db, classified: list[dict], now: str) -> int:
     ]
 
     stmt = sqlite_insert(Paper).values(values)
+
+    # 元数据只增不减（防御性策略）：
+    #   - authors / summary 取「更长」的一方：APS 等源的 RSS 摘要是被截断的
+    #     （末尾带 …），补全后的完整摘要不能被后续抓取覆盖回截断版；
+    #   - 与作者相关的 matched_authors / author_group 仅在新作者列表
+    #     至少同样完整时才接受，避免任何一层返回不完整作者时抹掉已算出的命中；
+    #   - date_added 取「更早」的一方：同一篇论文在提交日与公告日之间不应
+    #     来回跳动，否则月报的日期统计会漂移。
+    incoming_authors_len = func.length(func.coalesce(stmt.excluded.authors, ""))
+    stored_authors_len = func.length(func.coalesce(Paper.authors, ""))
+    authors_not_smaller = incoming_authors_len >= stored_authors_len
+
     stmt = stmt.on_conflict_do_update(
         index_elements=["link"],
         set_={
             "title": stmt.excluded.title,
-            "summary": stmt.excluded.summary,
-            "authors": stmt.excluded.authors,
-            "date_added": stmt.excluded.date_added,
+            "summary": case(
+                (
+                    func.length(func.coalesce(stmt.excluded.summary, ""))
+                    > func.length(func.coalesce(Paper.summary, "")),
+                    stmt.excluded.summary,
+                ),
+                else_=Paper.summary,
+            ),
+            "authors": case(
+                (authors_not_smaller, stmt.excluded.authors),
+                else_=Paper.authors,
+            ),
+            "date_added": case(
+                (
+                    func.coalesce(stmt.excluded.date_added, "") < Paper.date_added,
+                    stmt.excluded.date_added,
+                ),
+                else_=Paper.date_added,
+            ),
             "source": stmt.excluded.source,
             "source_url": stmt.excluded.source_url,
             "matched_keywords": stmt.excluded.matched_keywords,
-            "matched_authors": stmt.excluded.matched_authors,
-            "author_group": stmt.excluded.author_group,
+            "matched_authors": case(
+                (authors_not_smaller, stmt.excluded.matched_authors),
+                else_=Paper.matched_authors,
+            ),
+            "author_group": case(
+                (authors_not_smaller, stmt.excluded.author_group),
+                else_=Paper.author_group,
+            ),
             "fetched_at": stmt.excluded.fetched_at,
         },
     )

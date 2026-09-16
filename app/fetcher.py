@@ -296,6 +296,145 @@ def extract_doi_from_entry_simple(url: str) -> str:
 
 
 # ============================================================
+# arXiv 获取策略
+# ============================================================
+# 依据官方文档设计（info.arxiv.org/help/api/tou.html、/help/api/user-manual.html）：
+#   1. 「When using the legacy APIs (including OAI-PMH, RSS, and the arXiv API),
+#      make no more than one request every three seconds, and limit requests to
+#      a single connection at a time.」—— 三个接口共用一个限速额度。
+#   2. 「We recommend to refine queries which return more than 1,000 results,
+#      or at least request smaller slices.」
+#   3. 「For bulk metadata harvesting or set information, etc., the OAI-PMH
+#      interface is more suitable.」
+#   4. RSS 源（rss.arxiv.org/rss/<分类>）是官方「按分类提供新论文更新」的渠道，
+#      每日公告一次，含标题/摘要/分类/公告类型，且与 export.arxiv.org 的搜索
+#      限流相互独立 —— 因此作为每日抓取的首选层。
+#
+# 抓取分层：
+#   第一层 RSS 公告（rss.arxiv.org）：一次请求拿到当天该分类全部公告，
+#           API 被限流时依然可用；含完整摘要与完整作者列表（已与 abs 页核对）。
+#   第二层 时间窗 API（export.arxiv.org）：按 submittedDate 取窗口内全量，
+#           用于回溯补抓、补齐漏掉的日期与元数据校验。
+ARXIV_UA = "RNTS/2.0 (mailto:rnts@example.com)"
+# 官方限速：每 3 秒不超过 1 个请求，且同一时刻只用一条连接
+ARXIV_MIN_INTERVAL = 3.0
+# 单页条数：官方建议单次不超过 1000 条（大结果集对服务端负担大）
+ARXIV_PAGE_SIZE = 1000
+# 安全阀：配置写错（如窗口拉得过大）时不至于把内存拖爆。
+ARXIV_MAX_PAPERS = 8000
+# 时间窗查询的响应体远大于普通 RSS，单独给更宽的超时。
+ARXIV_REQUEST_TIMEOUT = 90.0
+# 手动补抓（交互式）用的超时：几秒内给结果，被限流时快速失败转用缓存
+ARXIV_QUICK_TIMEOUT = 30.0
+
+# 全局请求闸门：所有 *.arxiv.org 请求共用（对应官方「合计限速」要求）
+_arxiv_lock: asyncio.Lock | None = None
+_arxiv_last_request = 0.0
+
+
+async def _arxiv_gate() -> None:
+    """arXiv 请求闸门：串行化 + 保证相邻请求间隔 ≥ ARXIV_MIN_INTERVAL 秒。"""
+    global _arxiv_lock, _arxiv_last_request
+    if _arxiv_lock is None:
+        _arxiv_lock = asyncio.Lock()
+    async with _arxiv_lock:
+        wait = ARXIV_MIN_INTERVAL - (time.monotonic() - _arxiv_last_request)
+        if wait > 0:
+            await asyncio.sleep(wait)
+        _arxiv_last_request = time.monotonic()
+
+
+def canonical_arxiv_link(url: str) -> str:
+    """把 arXiv 链接规范化为唯一形式：https://arxiv.org/abs/<id>（去版本号）。
+
+    同一篇论文在不同接口里的写法不一致：搜索 API 给
+    http(s)://arxiv.org/abs/2609.12345v1，RSS 公告给
+    https://arxiv.org/abs/2609.12345。不统一会让数据库按 link 去重失效、
+    同一篇论文重复入库。
+    """
+    if not url:
+        return ""
+    m = re.search(r"arxiv\.org/abs/([\w.\-/]+?)(v\d+)?/?$", url)
+    if m:
+        return f"https://arxiv.org/abs/{m.group(1)}"
+    m = re.search(r"arxiv\.org/pdf/([\w.\-/]+?)(v\d+)?(\.pdf)?/?$", url)
+    if m:
+        return f"https://arxiv.org/abs/{m.group(1)}"
+    return url
+
+
+def _arxiv_rss_url(source: dict) -> str:
+    """推导该源对应的 arXiv RSS 公告地址。
+
+    优先用源配置里的 rss_url；否则从源 URL 的 search_query 里取 cat:<分类>
+    自动推导（如 cat:quant-ph → https://rss.arxiv.org/rss/quant-ph）。
+    无法推导时返回空串（跳过 RSS 层）。
+    """
+    explicit = (source.get("rss_url") or "").strip()
+    if explicit:
+        return explicit
+    try:
+        params = dict(httpx.URL(source.get("url", "")).params)
+    except Exception:
+        return ""
+    search_query = params.get("search_query", "")
+    m = re.search(r"\bcat:([A-Za-z0-9_.\-]+)", search_query)
+    if not m:
+        return ""
+    return f"https://rss.arxiv.org/rss/{m.group(1)}"
+
+
+def _extract_rss_items(
+    text: str, source_name: str, source_url: str
+) -> list[dict]:
+    """解析 arXiv RSS 公告源，返回论文列表。
+
+    - 跳过 replace / replace-cross：那是已有论文的新版本公告，不是新论文；
+      收下会把几个月前的老论文刷新成「本月新增」，污染月报。
+    - 作者：RSS 每条只有一个 <dc:creator> 元素，但元素内容是**逗号分隔的完整
+      作者列表**（已与 abs 页面逐条核对一致）。feedparser 会把整串放进
+      authors[0].name，这里原样保留。
+    """
+    feed = feedparser.parse(text)
+    papers = []
+    for item in feed.entries:
+        try:
+            announce = (item.get("arxiv_announce_type") or "").strip().lower()
+            if announce.startswith("replace"):
+                continue
+            link = canonical_arxiv_link(item.get("link", ""))
+            title = strip_html(item.get("title", ""))
+            if not title or not link:
+                continue
+
+            # 摘要：description 形如 "arXiv:2609.12345v1 Announce Type: new\nAbstract: ..."
+            raw_summary = item.get("summary", "") or item.get("description", "")
+            abstract = strip_html(raw_summary)
+            m = re.search(r"Abstract:\s*(.*)$", abstract, re.DOTALL)
+            if m:
+                abstract = m.group(1).strip()
+
+            author_names = [
+                a.get("name", "") for a in (item.get("authors") or [])
+            ] or ([item["author"]] if item.get("author") else [])
+
+            papers.append({
+                "title": title,
+                "link": link,
+                "summary": abstract,
+                "authors": ", ".join(n for n in author_names if n),
+                "date_added": parse_entry_date(item),
+                "source": source_name,
+                "source_url": source_url,
+            })
+        except Exception as e:
+            logger.warning(f"[{source_name}] RSS 条目解析失败: {e}")
+    return papers
+
+
+# ============================================================
+# 提取器
+# ============================================================
 # 5 种提取器 —— 每个源的 entry -> dict 映射
 # ============================================================
 def extract_arxiv(entry, source_name: str, source_url: str) -> dict:
@@ -303,7 +442,7 @@ def extract_arxiv(entry, source_name: str, source_url: str) -> dict:
     author_names = [a.get("name", "") for a in entry.get("authors", [])]
     return {
         "title": strip_html(entry.get("title", "")),
-        "link": entry.get("link", ""),
+        "link": canonical_arxiv_link(entry.get("link", "")),
         "summary": strip_html(entry.get("summary", "")),
         "authors": ", ".join(author_names),
         "date_added": parse_entry_date(entry),
@@ -434,8 +573,26 @@ EXTRACTORS: dict[str, Callable] = {
 # ============================================================
 # 传输层回退 —— 重试 + HTTP/3（QUIC）
 # ============================================================
-# httpx（TCP+TLS）请求失败后的重试等待秒数
-RETRY_DELAYS = (2, 5)
+# httpx（TCP+TLS）请求失败后的重试等待秒数。
+# 取 ≥3 秒是为了满足 arXiv 官方「每 3 秒不超过 1 个请求」的要求（重试也算请求）。
+# 只做一次重试：再失败就交给 HTTP/3 回退，避免在被阻断的网络里空等。
+RETRY_DELAYS = (3,)
+
+# 服务端返回 429 且没有 Retry-After 时的等待秒数。
+# arXiv 的限流是按出口 IP 计费的窗口，退避太短会让惩罚窗口不断被刷新。
+RATE_LIMIT_DELAY = 60.0
+
+
+class RateLimitedError(Exception):
+    """服务端以 HTTP 429 限流。
+
+    retry_after: 响应头 Retry-After 给出的建议等待秒数，缺省为 None。
+    """
+
+    def __init__(self, url: str, retry_after: float | None = None):
+        super().__init__(f"HTTP 429 限流: {url}")
+        self.url = url
+        self.retry_after = retry_after
 
 
 async def fetch_via_http3(url: str, timeout: float = 30.0) -> str:
@@ -480,8 +637,8 @@ async def fetch_via_http3(url: str, timeout: float = 30.0) -> str:
                     (b":scheme", b"https"),
                     (b":authority", authority.encode()),
                     (b":path", path.encode()),
-                    (b"user-agent",
-                     b"RNTS/2.0 (Academic Paper Tracker; +https://github.com/rnts)"),
+                (b"user-agent",
+                 ARXIV_UA.encode()),
                 ],
                 end_stream=True,
             )
@@ -514,14 +671,10 @@ async def fetch_via_http3(url: str, timeout: float = 30.0) -> str:
         ) as client:
             status, headers, body = await client.get(host, path)
             if status == "429":
-                # arXiv 对共享出口 IP 常见限流：按 Retry-After 等待后在同连接重试一次
-                delay = 10
+                # 不在连接内重试：由调用方统一做长退避，避免连续请求刷新限流窗口
                 ra = headers.get("retry-after", "")
-                if ra.isdigit():
-                    delay = max(3, min(int(ra), 60))
-                logger.info(f"HTTP/3 收到 429 限流，等待 {delay}s 后重试")
-                await asyncio.sleep(delay)
-                status, headers, body = await client.get(host, path)
+                retry_after = float(ra) if ra.isdigit() else None
+                raise RateLimitedError(url, retry_after)
             if status != "200":
                 raise httpx.HTTPStatusError(
                     f"HTTP/3 响应状态码 {status}",
@@ -538,17 +691,25 @@ async def fetch_source_text(
     name: str,
     url: str,
     timeout: float | None = None,
+    quick: bool = False,
 ) -> str:
     """抓取源 URL 的响应正文：httpx 重试若干次，全部失败后尝试 HTTP/3。
 
-    重试间隔见 RETRY_DELAYS（arXiv API 要求请求间隔 ≥3 秒，末次间隔取 5s）。
+    重试间隔见 RETRY_DELAYS（arXiv API 要求请求间隔 ≥3 秒）。
     所有途径均失败时抛出最后一次 httpx 异常。
 
     timeout 为空时沿用 client 自身的超时设置；arXiv 时间窗查询响应体更大，
     会显式传入更宽的超时。
+
+    quick=True 用于手动补抓这类交互式场景：TCP 与 HTTP/3 各只尝试**一次**、
+    命中 429 不做长退避，几秒到几十秒内必定返回（拿不到就用上层缓存），
+    避免用户点一下按钮卡住几分钟；想重试再点一次即可。
+    后台每日任务用默认值：有重试、有退避，且 HTTP/3 阶段有总时间预算，
+    不会因为对端「拖延不响应」而被拖住很久。
     """
     last_exc: Exception | None = None
-    for attempt in range(len(RETRY_DELAYS) + 1):
+    tcp_attempts = 1 if quick else len(RETRY_DELAYS) + 1
+    for attempt in range(tcp_attempts):
         if attempt:
             await asyncio.sleep(RETRY_DELAYS[attempt - 1])
         try:
@@ -566,23 +727,47 @@ async def fetch_source_text(
             )
 
     logger.info(f"[{name}] 直连失败，尝试 HTTP/3（QUIC）回退")
-    # CGNAT 共享出口 IP 容易连带触发 arXiv 的 429 限流，多试几次拉开间隔
-    for h3_attempt in range(3):
-        if h3_attempt:
-            await asyncio.sleep(10)
+    h3_timeout = (
+        timeout
+        if timeout is not None
+        else (
+            client.timeout.connect
+            if hasattr(client.timeout, "connect")
+            else 30
+        )
+    )
+    # HTTP/3 阶段总时间预算：对端被限流时会「拖延不响应」（不是返回 429），
+    # 没有预算的话多次尝试会累积到几分钟。
+    h3_deadline = time.monotonic() + (30.0 if quick else 90.0)
+    h3_max_attempts = 1 if quick else 3
+    delay = 0.0
+    for h3_attempt in range(h3_max_attempts):
+        if delay:
+            await asyncio.sleep(delay)
+        if time.monotonic() >= h3_deadline:
+            logger.warning(f"[{name}] HTTP/3 回退超出时间预算，停止尝试")
+            break
         try:
-            if timeout is not None:
-                h3_timeout = timeout
-            else:
-                h3_timeout = (
-                    client.timeout.connect
-                    if hasattr(client.timeout, "connect")
-                    else 30
-                )
             text = await fetch_via_http3(url, timeout=h3_timeout)
             logger.info(f"[{name}] HTTP/3 回退抓取成功")
             return text
+        except RateLimitedError as e:
+            last_exc = e
+            if quick:
+                logger.warning(f"[{name}] HTTP/3 收到 429 限流，本次不等待重试")
+                break
+            # 已被限流：最多再等一次长退避。连续冲击只会刷新对方的限流窗口，
+            # 让惩罚持续更久，所以这里主动收敛重试次数。
+            if h3_attempt >= 1:
+                logger.warning(f"[{name}] HTTP/3 仍被限流，停止重试以免加剧限流")
+                break
+            delay = e.retry_after or RATE_LIMIT_DELAY
+            logger.warning(
+                f"[{name}] HTTP/3 收到 429 限流，等待 {delay:.0f}s 后重试一次"
+            )
         except Exception as e:
+            last_exc = e
+            delay = 10.0
             logger.warning(
                 f"[{name}] HTTP/3 回退第 {h3_attempt + 1} 次失败: "
                 f"{type(e).__name__}: {e!r}"
@@ -621,6 +806,43 @@ def _load_fresh_cache(name: str) -> str:
     except OSError:
         pass
     return ""
+
+
+# ============================================================
+# 限流冷却期 —— 命中 429 后一段时间内不再请求，直接用缓存
+# ============================================================
+# arXiv 的限流按出口 IP 计费，冷却内反复请求会把惩罚窗口不断刷新、
+# 使恢复时间越来越晚。冷却期内每日抓取直接用缓存，手动补抓不受限制。
+RATE_LIMIT_COOLDOWN_MIN = 90
+
+
+def _ratelimit_marker(name: str) -> str:
+    return os.path.join("data", "cache", f"{name}.ratelimit")
+
+
+def _mark_rate_limited(name: str) -> None:
+    try:
+        os.makedirs(os.path.dirname(_ratelimit_marker(name)), exist_ok=True)
+        with open(_ratelimit_marker(name), "w", encoding="utf-8") as f:
+            f.write(datetime.now(timezone.utc).isoformat())
+    except OSError as e:
+        logger.warning(f"[{name}] 限流标记写入失败: {e}")
+
+
+def _rate_limit_active(name: str) -> bool:
+    """是否处于 429 冷却期内。"""
+    try:
+        age_min = (time.time() - os.path.getmtime(_ratelimit_marker(name))) / 60
+        return age_min < RATE_LIMIT_COOLDOWN_MIN
+    except OSError:
+        return False
+
+
+def _clear_rate_limit(name: str) -> None:
+    try:
+        os.remove(_ratelimit_marker(name))
+    except OSError:
+        pass
 
 
 # ============================================================
@@ -699,20 +921,14 @@ async def _extract_papers(
 
 
 # ============================================================
-# arXiv 时间窗抓取 —— 按 submittedDate 区间取全量
+# arXiv 时间窗抓取 —— 按 submittedDate 区间取全量（第二层：元数据补全 / 回溯）
 # ============================================================
 # 原实现把 start=0&max_results=50 写死在 config.yaml 的 URL 里，quant-ph 每日
 # 新提交常超过 50 篇，多出的条目被静默丢弃。这里改为按提交日期区间查询并翻页，
 # 取回窗口内全部条目。
 #
-# arXiv API 单次请求的 max_results 上限为 2000，超出需用 start 翻页。
-ARXIV_PAGE_SIZE = 2000
-# 安全阀：配置写错（如窗口拉得过大）时不至于把内存拖爆。
-ARXIV_MAX_PAPERS = 8000
-# arXiv API 要求同源请求间隔 ≥3 秒。
-ARXIV_PAGE_DELAY = 3.0
-# 时间窗查询的响应体远大于普通 RSS，单独给更宽的超时。
-ARXIV_REQUEST_TIMEOUT = 90.0
+# 相关常量（ARXIV_PAGE_SIZE / ARXIV_REQUEST_TIMEOUT / 请求闸门等）统一定义在
+# 文件上方的「arXiv 获取策略」一节。
 
 
 def build_arxiv_window_url(
@@ -762,6 +978,7 @@ async def fetch_arxiv_window(
     source: dict,
     start_date: date,
     end_date: date,
+    quick: bool = False,
 ) -> list[dict]:
     """按 submittedDate 区间抓取 arXiv 源的全部条目（自动翻页）。
 
@@ -770,10 +987,15 @@ async def fetch_arxiv_window(
     - 第一页正文写入本地缓存，保留断网/限流时的 48h 兜底能力；
     - 整窗失败且一条都没抓到（例如 429 限流），回退到缓存解析。
 
+    quick=True 用于手动补抓：命中 429 时不做长退避等待、请求超时更短，
+    让交互式操作几秒内拿到结果（想重试再点一次）。
+
     已入库条目由数据库 UNIQUE(link) 去重，因此窗口可以适当回溯、重复抓取无副作用。
     """
     name = source["name"]
     base_url = source["url"]
+    host = httpx.URL(base_url).host
+    request_timeout = ARXIV_QUICK_TIMEOUT if quick else ARXIV_REQUEST_TIMEOUT
     papers: list[dict] = []
     start = 0
     total: int | None = None
@@ -782,15 +1004,27 @@ async def fetch_arxiv_window(
     while start < ARXIV_MAX_PAPERS:
         url = build_arxiv_window_url(base_url, start_date, end_date, start=start)
         try:
+            await _arxiv_gate()
             text = await fetch_source_text(
-                client, name, url, timeout=ARXIV_REQUEST_TIMEOUT
+                client,
+                name,
+                url,
+                timeout=request_timeout,
+                quick=quick,
             )
         except Exception as e:
-            logger.error(
-                f"[{name}] 时间窗抓取失败（start={start}）: "
-                f"{type(e).__name__}: {e!r}",
-                exc_info=True,
-            )
+            if isinstance(e, RateLimitedError):
+                _mark_rate_limited(host)
+                logger.error(
+                    f"[{name}] 时间窗抓取被限流（{host}，start={start}），"
+                    f"{RATE_LIMIT_COOLDOWN_MIN} 分钟内不再请求"
+                )
+            else:
+                logger.error(
+                    f"[{name}] 时间窗抓取失败（start={start}）: "
+                    f"{type(e).__name__}: {e!r}",
+                    exc_info=True,
+                )
             if not papers:
                 cached = _load_fresh_cache(name)
                 if cached:
@@ -805,6 +1039,8 @@ async def fetch_arxiv_window(
 
         if start == 0:
             first_page_text = text
+            # 抓取恢复正常，解除限流冷却标记
+            _clear_rate_limit(host)
 
         feed = feedparser.parse(text)
         if total is None:
@@ -828,7 +1064,7 @@ async def fetch_arxiv_window(
 
         if total and start >= total:
             break
-        await asyncio.sleep(ARXIV_PAGE_DELAY)
+        # 翻页间隔由 _arxiv_gate() 统一保证（官方要求 ≥3 秒）
 
     # 只缓存第一页：feedparser 无法解析拼接后的多份 Atom 文档
     if first_page_text:
@@ -841,13 +1077,110 @@ async def fetch_arxiv_window(
     return papers
 
 
+async def _fetch_arxiv_rss_layer(
+    client: httpx.AsyncClient, source: dict
+) -> list[dict]:
+    """第一层：arXiv RSS 公告源（当天该分类的全部新公告）。
+
+    官方为「按分类获取新论文」提供的渠道，一次请求返回当天全部分类公告
+    （含交叉列表），响应小、与搜索 API 的限流相互独立。
+    限流冷却期内不请求，直接用缓存。
+    """
+    name = source["name"]
+    feed_url = _arxiv_rss_url(source)
+    if not feed_url:
+        logger.info(f"[{name}] 未能从源配置推导 RSS 公告地址，跳过公告层")
+        return []
+
+    cache_name = f"{name}-rss"
+    host = httpx.URL(feed_url).host
+
+    if _rate_limit_active(host):
+        cached = _load_fresh_cache(cache_name)
+        if cached:
+            logger.warning(
+                f"[{name}] {host} 处于限流冷却期，公告层改用本地缓存"
+            )
+            return _extract_rss_items(cached, name, feed_url)
+        logger.info(f"[{name}] {host} 处于限流冷却期且无缓存，跳过公告层")
+        return []
+
+    try:
+        await _arxiv_gate()
+        text = await fetch_source_text(client, f"{name}-rss", feed_url)
+        _save_cache(cache_name, text)
+        _clear_rate_limit(host)
+        papers = _extract_rss_items(text, name, feed_url)
+        logger.info(f"[{name}] 公告层（RSS）抓取到 {len(papers)} 篇新论文")
+        return papers
+    except RateLimitedError:
+        _mark_rate_limited(host)
+        logger.error(
+            f"[{name}] 公告层被限流（{host}），"
+            f"{RATE_LIMIT_COOLDOWN_MIN} 分钟内不再请求"
+        )
+    except Exception as e:
+        logger.error(
+            f"[{name}] 公告层抓取失败: {type(e).__name__}: {e!r}"
+        )
+
+    cached = _load_fresh_cache(cache_name)
+    if cached:
+        logger.warning(f"[{name}] 公告层改用 {CACHE_MAX_AGE_HOURS}h 内的本地缓存")
+        return _extract_rss_items(cached, name, feed_url)
+    return []
+
+
+async def _fetch_arxiv_window_layer(
+    client: httpx.AsyncClient,
+    source: dict,
+    start_date: date,
+    end_date: date,
+) -> list[dict]:
+    """第二层：时间窗 API 层（限流冷却期内直接用缓存，不再请求）。
+
+    手动补抓走 fetch_arxiv_window_sync，不受冷却期限制（用户显式触发）。
+    """
+    name = source["name"]
+    host = httpx.URL(source["url"]).host
+    if _rate_limit_active(host):
+        cached = _load_fresh_cache(name)
+        if cached:
+            logger.warning(
+                f"[{name}] {host} 处于限流冷却期"
+                f"（{RATE_LIMIT_COOLDOWN_MIN} 分钟内不再请求），时间窗层改用本地缓存"
+            )
+            return await _extract_papers(
+                client, name, source["url"], "arxiv", cached
+            )
+        logger.info(f"[{name}] {host} 处于限流冷却期且无缓存，跳过时间窗层")
+        return []
+    return await fetch_arxiv_window(client, source, start_date, end_date)
+
+
+def _merge_arxiv_papers(*groups: list[dict]) -> list[dict]:
+    """按规范化链接合并多层抓取结果；后一层的元数据覆盖前一层。
+
+    时间窗 API 层的元数据最完整（提交时间、全部作者），因此放在最后合并，
+    可以把公告层「只有第一作者」的条目补全。
+    """
+    merged: dict[str, dict] = {}
+    for group in groups:
+        for p in group:
+            link = canonical_arxiv_link(p.get("link", "")) or p.get("link", "")
+            if link:
+                merged[link] = {**p, "link": link}
+    return list(merged.values())
+
+
 async def _fetch_arxiv_source(
     client: httpx.AsyncClient, source: dict
 ) -> list[dict]:
-    """每日抓取时的 arXiv 入口：按配置的回溯天数计算滚动窗口。
+    """每日抓取时的 arXiv 入口：公告层 + 时间窗层合并。
 
-    使用本地日期，窗口为 [今天 - arxiv_lookback_days, 今天]。之所以回溯而非只取
-    当天：arXiv 的公告要晚于提交 1–2 天，且周一早上要覆盖上周五与周末的提交。
+    窗口为 [今天 - arxiv_lookback_days, 今天]。之所以回溯而非只取当天：
+    arXiv 的公告要晚于提交 1–2 天，且周一早上要覆盖上周五与周末的提交；
+    同时窗口层能把公告层缺失的作者信息补齐。
     """
     from app.config import load_config
 
@@ -857,7 +1190,22 @@ async def _fetch_arxiv_source(
         lookback = 3
     today = datetime.now().date()
     start_date = today - timedelta(days=max(0, lookback))
-    return await fetch_arxiv_window(client, source, start_date, today)
+    name = source["name"]
+
+    # 第一层：公告层（高可用，官方限流下依然可用）
+    rss_papers = await _fetch_arxiv_rss_layer(client, source)
+
+    # 第二层：时间窗层（元数据完整，兼顾回溯与作者补全）
+    window_papers = await _fetch_arxiv_window_layer(
+        client, source, start_date, today
+    )
+
+    papers = _merge_arxiv_papers(rss_papers, window_papers)
+    logger.info(
+        f"[{name}] arXiv 合计 {len(papers)} 篇"
+        f"（公告层 {len(rss_papers)} + 时间窗层 {len(window_papers)}，按链接去重后）"
+    )
+    return papers
 
 
 def fetch_arxiv_window_sync(
@@ -865,16 +1213,32 @@ def fetch_arxiv_window_sync(
     start_date: date,
     end_date: date,
 ) -> list[dict]:
-    """同步包装：单源时间窗抓取（供手动补抓 API 在线程池中调用）。"""
-    headers = {
-        "User-Agent": "RNTS/2.0 (Academic Paper Tracker; +https://github.com/rnts)"
-    }
+    """同步包装：单源时间窗抓取（供手动补抓 API 在线程池中调用）。
+
+    补抓是用户显式发起的交互式操作：
+    - 不受限流冷却期限制（可能刚好赶上限流窗口结束，能立刻抓到新数据）；
+    - 但命中 429 时快速失败、不做长退避（见 fetch_arxiv_window 的 quick），
+      避免一次点击卡住几分钟——想重试再点一次即可；
+    - 若补抓区间包含今天，同时合并当天的公告层（RSS）。公告层与搜索 API 的
+      限流相互独立，这样即使 API 正被限流，补抓也能拿回当天的新公告。
+    """
+    headers = {"User-Agent": ARXIV_UA}
 
     async def _run() -> list[dict]:
         async with httpx.AsyncClient(
             timeout=ARXIV_REQUEST_TIMEOUT, headers=headers, verify=False
         ) as client:
-            return await fetch_arxiv_window(client, source, start_date, end_date)
+            papers = await fetch_arxiv_window(
+                client, source, start_date, end_date, quick=True
+            )
+            if end_date >= datetime.now().date():
+                try:
+                    rss_papers = await _fetch_arxiv_rss_layer(client, source)
+                except Exception as e:
+                    logger.warning(f"补抓时公告层失败（不影响结果）: {e!r}")
+                    rss_papers = []
+                papers = _merge_arxiv_papers(rss_papers, papers)
+            return papers
 
     def _in_thread() -> list[dict]:
         loop = asyncio.new_event_loop()
@@ -922,6 +1286,9 @@ async def fetch_single_source(
         text = await fetch_source_text(client, name, url)
         _save_cache(name, text)
     except Exception as e:
+        if isinstance(e, RateLimitedError):
+            # 按主机记录冷却：该主机被限流时，后续运行不再继续冲击它
+            _mark_rate_limited(httpx.URL(url).host)
         # 带异常类型与 repr，避免 httpx 传输层异常 str() 为空导致日志无信息
         logger.error(
             f"[{name}] 抓取失败: {type(e).__name__}: {e!r}", exc_info=True
@@ -946,7 +1313,7 @@ async def fetch_all_sources(sources: list[dict], timeout: int = 30) -> list[dict
         所有源的论文列表合并（未去重，去重由数据库 UNIQUE 约束处理）
     """
     headers = {
-        "User-Agent": "RNTS/2.0 (Academic Paper Tracker; +https://github.com/rnts)"
+        "User-Agent": ARXIV_UA
     }
     async with httpx.AsyncClient(
         timeout=timeout, headers=headers, verify=False
