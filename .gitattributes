@@ -16,6 +16,8 @@
 *.bat  text eol=crlf
 *.cmd  text eol=crlf
 *.ps1  text eol=crlf
+# VBS 由 Windows Script Host 解析，同样按 CRLF 最稳（否则会被兜底规则转成 LF）
+*.vbs  text eol=crlf
 
 # 其余文本：显式声明 LF（写出来是给以后改的人看的，实际由兜底规则保证）
 *.sh   text eol=lf

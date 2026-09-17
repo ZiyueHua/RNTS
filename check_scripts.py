@@ -24,6 +24,7 @@ ROOT = pathlib.Path(__file__).resolve().parent
 # 需要扫描的项目文件（排除 .venv、备份目录）
 TARGETS = [
     "run.bat", "run_daily_task.bat", "sort_config.bat", "setup_env.bat",
+    "generate_report.bat", "stop.bat",
     "install_autostart.ps1", "install_daily_task.ps1", "run_daily_task.ps1",
     "run.sh", "setup_env.sh",
     "sort_config.py", "check_scripts.py",

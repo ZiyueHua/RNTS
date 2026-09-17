@@ -31,9 +31,11 @@ def _fmt_paper_compact(p, source_names, index=None):
     lines = []
     lines.append(f"{prefix}**[{p.get('title')}]({p.get('link')})**")
     lines.append("")
-    lines.append(f"**作者**: {p.get('authors') or '未知'}")
-    lines.append(f"**日期**: {date_str}")
-    lines.append(f"**来源**: {p.get('source')}")
+    # 行尾两个空格是 Markdown 硬换行：html 渲染器已改为每行一个 <p>，
+    # 但 md 报告要靠这两个空格，四项才会各占一行（否则会被合并成一段）。
+    lines.append(f"**作者**: {p.get('authors') or '未知'}  ")
+    lines.append(f"**日期**: {date_str}  ")
+    lines.append(f"**来源**: {p.get('source')}  ")
     lines.append(f"**关键词**: " + (" ".join(keywords) if keywords else "无"))
     lines.append("")
     if p.get("summary"):
