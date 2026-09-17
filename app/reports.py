@@ -25,16 +25,16 @@ def _fmt_paper_compact(p, source_names, index=None):
     date_str = p.get("date_added", "")[:10] if p.get("date_added") else ""
     source_disp = source_names.get(p.get("source"), p.get("source"))
 
-    tags = [f"`{source_disp}`"]
-    for kw in p.get("matched_keywords", []):
-        tags.append(f"`{kw}`")
+    keywords = [f"`{kw}`" for kw in p.get("matched_keywords", [])]
 
     prefix = f"{index}. " if index else "### "
     lines = []
     lines.append(f"{prefix}**[{p.get('title')}]({p.get('link')})**")
     lines.append("")
-    lines.append(f"**作者**: {p.get('authors') or '未知'}  ")
-    lines.append(f"**日期**: {date_str} | **来源**: {p.get('source')} | " + " ".join(tags))
+    lines.append(f"**作者**: {p.get('authors') or '未知'}")
+    lines.append(f"**日期**: {date_str}")
+    lines.append(f"**来源**: {p.get('source')}")
+    lines.append(f"**关键词**: " + (" ".join(keywords) if keywords else "无"))
     lines.append("")
     if p.get("summary"):
         lines.append("> " + p.get("summary").replace("\n", "\n> "))
@@ -312,7 +312,7 @@ def generate_report_artifacts(db=None) -> dict:
 _CSS = """
 :root { color-scheme: light; }
 * { box-sizing: border-box; }
-body { max-width: 880px; margin: 0 auto; padding: 24px 18px 60px;
+body { width: min(92vw, 1600px); margin: 0 auto; padding: 24px 18px 60px;
        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
          Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB",
          "Microsoft YaHei", sans-serif;
@@ -436,22 +436,12 @@ def md_to_html(md: str, title: str = "") -> str:
             i += 1
             continue
 
-        # 普通段落（合并连续非空非特殊行）
-        # 注意：不在此处排除以 | 开头的行，否则孤立的 | 行（非合法表格，
-        # 即下一行不是分隔行）会穿透所有分支且 i 不前进，导致死循环。
-        # 合法的表格已在上方分支处理；走到这里的 | 行按纯文本段落渲染。
-        para = []
-        while (
-            i < n
-            and lines[i].strip()
-            and not lines[i].lstrip().startswith(">")
-            and not re.match(r"^(#{1,4})\s+", lines[i])
-            and not re.match(r"^\s*---\s*$", lines[i])
-        ):
-            para.append(_md_inline(lines[i]))
+        # 普通段落
+        # 每一行单独处理，避免作者、日期、来源等信息被合并
+        if line.strip():
+            out.append("<p>" + _md_inline(line) + "</p>")
             i += 1
-        if para:
-            out.append("<p>" + " ".join(para) + "</p>")
+            continue
         else:
             # 兜底：若本行未被任何分支消费（例如孤立的 | 行），
             # 必须推进 i，避免主循环死循环。
