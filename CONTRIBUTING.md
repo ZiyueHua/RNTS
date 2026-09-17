@@ -51,6 +51,47 @@ git push -u origin feature/简短描述
 git pull --rebase origin main
 ```
 
+### 2.1 用的是 fork？还得同步上游
+
+如果你还没有协作者权限、只能通过 **fork** 参与，那你的 fork 会很快落后于主仓库。每次开工前先同步：
+
+```bash
+# 只需设置一次：把主仓库加为 upstream
+git remote add upstream https://github.com/ZiyueHua/RNTS.git
+
+# 之后每次开工前
+git fetch upstream
+git switch main
+git merge upstream/main         # 或 git rebase upstream/main
+git push origin main            # 让自己 fork 的 main 也跟上
+```
+
+确认两端都配好了：
+
+```bash
+git remote -v     # 应看到 origin（你的 fork）与 upstream（主仓库）两条
+```
+
+> **一旦成为协作者，这套就都可以不用了** —— 直接 clone 主仓库、在主仓库上建分支推 PR 即可，没有 upstream 要维护。
+
+### 2.2 常见冲突与处理
+
+| 症状 | 原因 | 怎么处理 |
+|---|---|---|
+| `git pull` 报 `CONFLICT (content)` | 两边改了同一个文件 | 打开冲突文件，找到 `<<<<<<<` / `=======` / `>>>>>>>` 手工取舍，然后 `git add <文件>` 再 `git rebase --continue`（rebase 时）或 `git commit`（merge 时） |
+| 某个 `.bat` 整个文件显示为改动 | 换行符被改了（CRLF ↔ LF） | 先 `git config core.autocrlf false`（让 `.gitattributes` 全权决定），再 `git checkout -- <文件>` 重新检出。**别手工逐行改** |
+| PR 页面出现大量无关改动 | 同上，通常是换行符差异 | 同上处理；并把 `core.autocrlf` 设为 `false` |
+| 推送被拒 `non-fast-forward` | 远端有你本地没有的提交 | 先 `git pull --rebase origin main` 再推。**自己的功能分支**可以 `git push --force-with-lease`；**`main` 永远不要强推**（已被分支保护禁止） |
+| `config/config.yaml` 出现在冲突里 | 有人强行 `git add` 了它（它本该在 `.gitignore` 里） | `git rm --cached config/config.yaml` 把它移出跟踪，然后提交 |
+| 合并完发现脚本跑不起来了 | 上面几条红线里某一条被破坏 | 跑 `python check_scripts.py` 定位，按提示修复；实在乱了就 `git checkout <文件>` 重新检出 |
+
+**通用原则**：
+
+1. 遇到冲突**先别慌**，`git status` 会告诉你哪些文件冲突、当前处于哪个阶段；
+2. 拿不准就**先留一份**：`git stash`，或者直接复制整个项目目录；
+3. 想彻底放弃本次操作、回到干净状态：`git rebase --abort` / `git merge --abort`；
+4. **合并完一定跑 `python check_scripts.py`** —— 这是本项目唯一能自动抓住「换行被改坏」的防线。
+
 ---
 
 ## 三、项目红线（务必遵守）
