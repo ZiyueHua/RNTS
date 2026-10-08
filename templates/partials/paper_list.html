@@ -1,7 +1,7 @@
 {# 论文列表片段（HTMX 局部刷新） #}
 
 {# 翻页链接的公共查询串：带上全部筛选条件，保证翻页不丢条件 #}
-{% set extra %}{% if filters.source %}&source={{ filters.source }}{% endif %}{% if filters.author_group %}&author_group={{ filters.author_group }}{% endif %}{% if filters.keyword %}&keyword={{ filters.keyword }}{% endif %}{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.date_from %}&date_from={{ filters.date_from }}{% endif %}{% if filters.date_to %}&date_to={{ filters.date_to }}{% endif %}{% if filters.per_page %}&per_page={{ filters.per_page }}{% endif %}{% if not filters.matched_only %}&matched_only=0{% endif %}{% endset %}
+{% set extra %}{% if filters.source %}&source={{ filters.source }}{% endif %}{% if filters.author_group %}&author_group={{ filters.author_group }}{% endif %}{% if filters.keyword %}&keyword={{ filters.keyword }}{% endif %}{% if filters.search %}&search={{ filters.search }}{% endif %}{% if filters.date_from %}&date_from={{ filters.date_from }}{% endif %}{% if filters.date_to %}&date_to={{ filters.date_to }}{% endif %}{% if filters.date_preset %}&date_preset={{ filters.date_preset }}{% endif %}{% if filters.per_page %}&per_page={{ filters.per_page }}{% endif %}{% if not filters.matched_only %}&matched_only=0{% endif %}{% endset %}
 
 <div class="paper-count">
     <small>共 {{ total }} 篇，第 {{ page }}/{{ total_pages }} 页

@@ -25,6 +25,8 @@
             <h3>来源</h3>
             <select name="source">
                 <option value="">全部</option>
+                {# 特殊值：只看已发表文献，隐藏 arXiv 预印本。不会和 rss_sources.name 冲突 #}
+                <option value="__exclude_arxiv__" {% if filters.source == "__exclude_arxiv__" %}selected{% endif %}>不显示 arXiv（只看已发表）</option>
                 {% for name, display in sources %}
                 <option value="{{ name }}" {% if filters.source == name %}selected{% endif %}>{{ display }}</option>
                 {% endfor %}
@@ -46,10 +48,36 @@
             </select>
 
             <h3>日期范围</h3>
+            {# 快捷预设：默认近一周，切换时由后端按 preset 自动算 date_from/date_to。
+               选「自定义」时再放开下方两个日期输入框（见底部 JS 联动）。 #}
+            <fieldset role="group" class="date-preset">
+                <label class="seg">
+                    <input type="radio" name="date_preset" value="week"
+                           {% if filters.date_preset == "week" %}checked{% endif %}>
+                    <span>近一周</span>
+                </label>
+                <label class="seg">
+                    <input type="radio" name="date_preset" value="month"
+                           {% if filters.date_preset == "month" %}checked{% endif %}>
+                    <span>近一月</span>
+                </label>
+                <label class="seg">
+                    <input type="radio" name="date_preset" value="all"
+                           {% if filters.date_preset == "all" %}checked{% endif %}>
+                    <span>全部</span>
+                </label>
+                <label class="seg">
+                    <input type="radio" name="date_preset" value="custom"
+                           {% if filters.date_preset == "custom" %}checked{% endif %}>
+                    <span>自定义</span>
+                </label>
+            </fieldset>
             <label>从</label>
-            <input type="date" name="date_from" value="{{ filters.date_from }}">
+            <input type="date" name="date_from" value="{{ filters.date_from }}"
+                   id="date-from-input">
             <label>到</label>
-            <input type="date" name="date_to" value="{{ filters.date_to }}">
+            <input type="date" name="date_to" value="{{ filters.date_to }}"
+                   id="date-to-input">
 
             <h3>每页</h3>
             <select name="per_page">
@@ -92,4 +120,34 @@
         {% include "partials/paper_list.html" %}
     </div>
 </div>
+
+<script>
+// 日期预设联动：选「自定义」以外时禁用 date_from/date_to 输入框（仅显示用，不提交时会被忽略）；
+// 切换预设时自动提交表单，让 HTMX 局部刷新。
+(function () {
+    const form = document.getElementById('filter-form');
+    if (!form) return;
+    const fromInput = document.getElementById('date-from-input');
+    const toInput = document.getElementById('date-to-input');
+
+    function syncCustomEnabled() {
+        const preset = form.querySelector('input[name="date_preset"]:checked');
+        const isCustom = preset && preset.value === 'custom';
+        if (fromInput) fromInput.disabled = !isCustom;
+        if (toInput) toInput.disabled = !isCustom;
+    }
+
+    // 初次进入时按当前 preset 决定两个输入框的启用状态
+    syncCustomEnabled();
+
+    // 切预设时联动 + 自动提交（HTMX 监听 form 的 change 事件做局部刷新）
+    form.querySelectorAll('input[name="date_preset"]').forEach(r => {
+        r.addEventListener('change', () => {
+            syncCustomEnabled();
+            // 让 HTMX 立即拿新参数刷一次
+            htmx.trigger(form, 'change');
+        });
+    });
+})();
+</script>
 {% endblock %}

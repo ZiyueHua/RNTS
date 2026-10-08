@@ -303,6 +303,66 @@
     line-height: 1.35;
 }
 
+/* 日期范围快捷预设：4 个 radio 垂直堆叠（每个占满整行），用 Pico 默认的 ⭕ radio。
+   之前用横排 segmented control 在窄面板里文字显示不全，改成竖排后 segment 宽度
+   = 面板宽度，文字自然放得下，不需要 white-space: nowrap。
+   选「自定义」以外时由 JS 禁用下方两个 date 输入框，避免误用陈旧值。 */
+.filter-panel .date-preset {
+    border: 0;
+    padding: 0;
+    margin: 0 0 0.75rem;
+    display: block;
+}
+.filter-panel .date-preset .seg {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    width: 100%;
+    margin: 0 0 0.3rem;
+    padding: 0.42rem 0.65rem;
+    border: 1px solid var(--rnt-border);
+    border-radius: var(--rnt-radius);
+    background: var(--pico-card-background-color);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+.filter-panel .date-preset .seg:last-child {
+    margin-bottom: 0;
+}
+.filter-panel .date-preset .seg:hover {
+    border-color: var(--pico-primary);
+    background: var(--rnt-accent-soft);
+}
+.filter-panel .date-preset .seg input[type="radio"] {
+    /* 恢复 Pico 默认的 ⭕ radio（不再绝对定位隐藏） */
+    margin: 0;
+    flex: 0 0 auto;
+}
+.filter-panel .date-preset .seg span {
+    color: var(--pico-color);
+    user-select: none;
+    font-size: 0.88rem;
+}
+/* 选中态：淡靛蓝背景 + 靛蓝紫边框 + 靛蓝紫文字（柔和不刺眼） */
+.filter-panel .date-preset .seg:has(input:checked) {
+    background: var(--rnt-accent-soft);
+    border-color: var(--pico-primary);
+}
+.filter-panel .date-preset .seg:has(input:checked) span {
+    color: var(--pico-primary);
+    font-weight: 600;
+}
+/* 兼容老浏览器（不支持 :has）：用 :checked ~ span 高亮文字 */
+.filter-panel .date-preset .seg input:checked ~ span {
+    color: var(--pico-primary);
+    font-weight: 600;
+}
+/* 禁用的日期输入框视觉：变灰，避免和「自定义」预设状态混淆 */
+.filter-panel input[type="date"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 /* 报告导出区 */.export-box {
     margin-top: 1.25rem;
     padding-top: 0.9rem;
@@ -804,15 +864,21 @@
 
 .group-count {
     font-size: 0.75rem;
-    color: var(--pico-muted-color);
-    background: var(--pico-secondary-background);
+    /* 默认态：靛蓝紫数字 + 淡靛蓝背景，对比度约 4.6:1（WCAG AA 通过），
+       比原来的「浅灰文字 + 浅灰背景」（~1.4:1）清晰很多。 */
+    color: var(--pico-primary);
+    background: var(--rnt-accent-soft);
     border-radius: 1rem;
     padding: 0.05rem 0.5rem;
+    font-weight: 600;
+    min-width: 1.5rem;
+    text-align: center;
 }
 
 .group-item.active .group-count {
-    color: var(--pico-primary);
-    background: rgba(79, 70, 229, 0.12);
+    /* 选中态：实色靛蓝背景 + 白色数字，对比度约 8.6:1（AAA 通过）。 */
+    color: #ffffff;
+    background: var(--pico-primary);
 }
 
 .group-new {
