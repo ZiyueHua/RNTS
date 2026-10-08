@@ -68,22 +68,43 @@ async def index(
     search: str = Query(""),
     date_from: str = Query(""),
     date_to: str = Query(""),
+    # 日期预设：week=近一周（默认）/ month=近一月 / all=全部 / custom=用 date_from+date_to
+    # 切换预设时后端会自动覆盖前端的 date_from/date_to，避免筛选面板里残留旧值
+    date_preset: str = Query("week"),
     matched_only: int = Query(1),
 ):
     """论文列表页 —— 支持筛选/搜索/分页，HTMX 局部刷新。
 
     matched_only=1（默认）只显示命中关键词或高亮作者的文献；
     matched_only=0 显示库中全部原始文献。
+    date_preset 默认 'week'：只显示最近 7 天的文章，减少噪音。
     """
     config = load_config()
     if per_page == 0:
         per_page = config.schedule.per_page
 
+    # —— 日期预设归一化 —— unknown 当作 'all'（不应用日期过滤）
+    preset = date_preset if date_preset in ("week", "month", "all", "custom") else "all"
+    if preset == "week":
+        date_from = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+        date_to = datetime.now().strftime("%Y-%m-%d")
+    elif preset == "month":
+        date_from = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+        date_to = datetime.now().strftime("%Y-%m-%d")
+    elif preset == "all":
+        date_from = ""
+        date_to = ""
+    # preset == "custom" 时保留前端传入的 date_from / date_to 原样
+
     query = db.query(Paper)
 
     # 基础筛选（不依赖命中判定，可下推到 SQL）
     if source:
-        query = query.filter(Paper.source == source)
+        # 特殊值 "__exclude_arxiv__"：在 UI 里代表"不显示 arXiv（只看已发表）"
+        if source == "__exclude_arxiv__":
+            query = query.filter(Paper.source != "arxiv")
+        else:
+            query = query.filter(Paper.source == source)
     if search:
         search_term = f"%{search}%"
         query = query.filter(
@@ -145,6 +166,7 @@ async def index(
                     "search": search,
                     "date_from": date_from,
                     "date_to": date_to,
+                    "date_preset": preset,
                     "per_page": per_page,
                     "matched_only": matched_only,
                 },
@@ -170,6 +192,7 @@ async def index(
                 "search": search,
                 "date_from": date_from,
                 "date_to": date_to,
+                "date_preset": preset,
                 "per_page": per_page,
                 "matched_only": matched_only,
             },
