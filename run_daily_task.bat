@@ -27,8 +27,8 @@ echo ============================================================
 echo  RNTS daily task
 echo  Fetching papers and generating reports (takes 1-2 minutes)...
 echo  DO NOT close this window until you see [OK] or [FAIL].
-echo  Full output -> data\daily_task.log
-echo  Daily status -> data\daily_status.log
+echo  Full output : data\daily_task.log
+echo  Daily status : data\daily_status.log
 echo ============================================================
 echo.
 
